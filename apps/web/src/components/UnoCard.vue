@@ -130,9 +130,9 @@ const svg = computed(() => {
   height: 100%;
 }
 
-.sz-md { width: 62px; height: 93px; }
-.sz-lg { width: 78px; height: 117px; }
-.sz-sm { width: 30px; height: 45px; }
+.sz-md { width: var(--cw-md, 62px); height: calc(var(--cw-md, 62px) * 1.5); }
+.sz-lg { width: var(--cw-lg, 78px); height: calc(var(--cw-lg, 78px) * 1.5); }
+.sz-sm { width: var(--cw-sm, 30px); height: calc(var(--cw-sm, 30px) * 1.5); }
 
 .uno-card.dim {
   filter: grayscale(0.6) brightness(0.72) drop-shadow(0 2px 4px rgba(15, 16, 24, 0.3));

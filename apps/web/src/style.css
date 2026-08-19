@@ -1,5 +1,9 @@
 :root {
   --bg: #eef0f6;
+  /* 卡牌尺寸（移动端默认，桌面端由媒体查询放大） */
+  --cw-md: 62px;
+  --cw-lg: 78px;
+  --cw-sm: 30px;
   --bg-grad: radial-gradient(120% 90% at 50% 0%, #f7f8fc 0%, #e7eaf3 48%, #dfe3ee 100%);
   --surface: #ffffff;
   --surface-2: #eceef4;
@@ -389,8 +393,8 @@ input:focus {
 /* ---------- 摸牌堆 ---------- */
 .draw-stack {
   position: relative;
-  width: 78px;
-  height: 132px;
+  width: var(--cw-lg);
+  height: calc(var(--cw-lg) * 1.5 + 16px);
   cursor: pointer;
 }
 
@@ -442,8 +446,8 @@ input:focus {
 /* ---------- 弃牌堆（凌乱堆叠） ---------- */
 .discard-stack {
   position: relative;
-  width: 96px;
-  height: 138px;
+  width: calc(var(--cw-lg) + 18px);
+  height: calc(var(--cw-lg) * 1.5 + 22px);
 }
 
 .disc-bk,
@@ -451,7 +455,7 @@ input:focus {
   position: absolute;
   top: 50%;
   left: 50%;
-  margin: -58px 0 0 -39px;
+  margin: calc(var(--cw-lg) * -0.75) 0 0 calc(var(--cw-lg) * -0.5);
 }
 
 .disc-top {
@@ -471,7 +475,7 @@ input:focus {
   overflow-x: auto;
   padding: 16px 4px 12px;
   scroll-snap-type: x proximity;
-  min-height: 126px;
+  min-height: calc(var(--cw-md) * 1.5 + 34px);
   align-items: flex-end;
 }
 
@@ -486,21 +490,16 @@ input:focus {
 }
 
 .hand-cell.playable {
-  transform: translateY(-12px);
+  transform: translateY(-14px);
   cursor: pointer;
 }
 
-.hand-cell.playable::after {
-  content: '';
-  position: absolute;
-  inset: -7px;
-  border-radius: 14px;
-  border: 2px solid var(--accent);
-  opacity: 0.55;
-  box-shadow: 0 0 14px rgba(83, 74, 183, 0.35);
+/* 可出牌：不加边框，靠抬高 + 光晕高亮 */
+.hand-cell.playable .uno-card {
+  filter: drop-shadow(0 10px 20px rgba(83, 74, 183, 0.5)) drop-shadow(0 2px 5px rgba(15, 16, 24, 0.3));
 }
 
-.hand-cell.dim :deep(.uno-card) {
+.hand-cell.dim .uno-card {
   filter: grayscale(0.6) brightness(0.72);
 }
 
@@ -1048,5 +1047,180 @@ input:focus {
   }
   50% {
     margin-top: -5px;
+  }
+}
+
+/* ---------- 桌面端（≥768px）：充分利用宽度，接近全屏体验 ---------- */
+@media (min-width: 768px) {
+  :root {
+    --cw-md: 92px;
+    --cw-lg: 108px;
+    --cw-sm: 42px;
+  }
+
+  body {
+    font-size: 15.5px;
+  }
+
+  /* 对局页：解除 560px 限制，铺满可用宽度 */
+  .play-wrap {
+    max-width: none;
+    padding: 0 36px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  /* 对手座位放大、拉开间距 */
+  .seats {
+    gap: 28px;
+    padding: 18px 0 10px;
+  }
+
+  .seat {
+    min-width: 176px;
+    padding: 16px 20px 14px;
+    border-radius: 20px;
+  }
+
+  .back-fan {
+    height: calc(var(--cw-sm) * 1.5 + 14px);
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .seat .name {
+    font-size: 15px;
+    max-width: 140px;
+  }
+
+  .seat .avatar.sm {
+    width: 34px;
+    height: 34px;
+    font-size: 16px;
+  }
+
+  .fan-count {
+    font-size: 13px;
+    padding: 2px 11px;
+    right: 6px;
+    bottom: -4px;
+  }
+
+  .seat .badge-uno {
+    font-size: 12px;
+    padding: 3px 9px;
+    top: -11px;
+    right: -8px;
+  }
+
+  .catch-btn {
+    font-size: 13px;
+    padding: 5px 18px;
+    bottom: -12px;
+  }
+
+  /* 牌桌放大 */
+  .table-area {
+    border-radius: 30px;
+    padding: 26px 24px;
+    margin: 8px 0;
+  }
+
+  .piles {
+    gap: 96px;
+  }
+
+  .status-row {
+    font-size: 15px;
+    gap: 18px;
+  }
+
+  .direction {
+    font-size: 28px;
+  }
+
+  .color-dot {
+    width: 20px;
+    height: 20px;
+  }
+
+  .turn-banner {
+    font-size: 17px;
+  }
+
+  .pending-badge {
+    font-size: 15px;
+    padding: 4px 15px;
+  }
+
+  .draw-hint {
+    font-size: 13px;
+    top: -20px;
+  }
+
+  .pile-count {
+    font-size: 13px;
+    bottom: -15px;
+    padding: 2px 11px;
+  }
+
+  /* 手牌：更大、居中排布、支持悬停预览 */
+  .hand-area {
+    padding: 18px 0 6px;
+  }
+
+  .hand {
+    gap: 14px;
+    justify-content: safe center;
+    padding: 24px 6px 14px;
+    min-height: calc(var(--cw-md) * 1.5 + 42px);
+  }
+
+  .hand-cell.playable {
+    transform: translateY(-18px);
+  }
+
+  .hand-cell.playable:hover {
+    transform: translateY(-30px) scale(1.06);
+    z-index: 5;
+  }
+
+  .hand-total {
+    font-size: 14px;
+  }
+
+  .action-bar {
+    gap: 16px;
+    padding-top: 10px;
+  }
+
+  .uno-btn {
+    font-size: 19px;
+    padding: 14px 32px;
+  }
+
+  /* 大厅与等待页适度放宽 */
+  .home-wrap,
+  .wait-wrap {
+    max-width: 720px;
+  }
+
+  .hero-cards {
+    height: calc(var(--cw-sm) * 1.5 + 26px);
+  }
+
+  .hero-cards .hc1 { transform: rotate(-18deg) translateX(-92px) translateY(10px); }
+  .hero-cards .hc2 { transform: rotate(-6deg) translateX(-32px) translateY(0); }
+  .hero-cards .hc3 { transform: rotate(7deg) translateX(32px) translateY(2px); }
+  .hero-cards .hc4 { transform: rotate(19deg) translateX(92px) translateY(12px); }
+
+  .entry-tile {
+    padding: 18px 22px;
+  }
+
+  .tile-title {
+    font-size: 19px;
+  }
+
+  .tile-desc {
+    font-size: 13px;
   }
 }

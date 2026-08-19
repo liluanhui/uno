@@ -55,7 +55,7 @@ const svg = computed(() => `<svg viewBox="0 0 120 180" xmlns="http://www.w3.org/
   height: 100%;
 }
 
-.sz-md { width: 62px; height: 93px; }
-.sz-lg { width: 78px; height: 117px; }
-.sz-sm { width: 30px; height: 45px; }
+.sz-md { width: var(--cw-md, 62px); height: calc(var(--cw-md, 62px) * 1.5); }
+.sz-lg { width: var(--cw-lg, 78px); height: calc(var(--cw-lg, 78px) * 1.5); }
+.sz-sm { width: var(--cw-sm, 30px); height: calc(var(--cw-sm, 30px) * 1.5); }
 </style>
