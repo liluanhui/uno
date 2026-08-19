@@ -199,12 +199,6 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     }
   }
 
-  @SubscribeMessage('game:chat')
-  onChat(client: Socket, payload: { emoji?: string }) {
-    const info = this.sockets.get(client.id);
-    if (info?.roomCode) this.rooms.chat(info.roomCode, info.userId, payload?.emoji || '');
-  }
-
   private replyError(client: Socket, e: unknown) {
     const err = e as GameError;
     const code = err?.code || 'unknown';

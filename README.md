@@ -13,14 +13,17 @@
 ```bash
 pnpm install
 
-# 1. 启动 API（端口 3001）
+# 1. 启动 API（默认端口 5001，可用 PORT 覆盖）
 pnpm build:api && pnpm dev:api
 
-# 2. 启动前端（端口 5173，已代理 socket.io）
+# 2. 启动前端（默认端口 5173，已代理 socket.io；可用 WEB_PORT / API_PORT 覆盖）
 pnpm dev:web
 ```
 
 打开 http://localhost:5173 即可游玩。
+
+> 若默认端口被占用：`PORT=5002 pnpm dev:api` + `API_PORT=5002 WEB_PORT=5174 pnpm dev:web`，
+> 冒烟测试同样支持 `API_URL=http://localhost:5002 node scripts/smoke.cjs`。
 
 ## 测试
 
@@ -51,3 +54,10 @@ node scripts/smoke.cjs # 端到端冒烟测试（需先启动 API）
 - 对局状态为纯 JSON 快照，天然支持断线重连（重连保留座位，掉线期间 AI 托管）
 - 回合 30 秒超时自动托管；房间全员准备后自动开局
 - 游客自动登录（token 存 localStorage），无需注册
+
+## 视觉与动效
+
+- 牌面为 SVG 绘制的经典 UNO 样式（斜椭圆 + 角标 + 功能牌图标 + 四色万能牌 + UNO 字标牌背）
+- 开局有洗牌、发牌动效（服务端广播 `game:dealing`）；喊 UNO 时全房间播放爆炸特效（`game:uno`）
+- 对手手牌以牌背扇形 + 张数展示；弃牌堆呈随机角度堆叠的"凌乱"效果
+- 出牌/摸牌均有飞入飞出动画；移动端优先布局，支持亮/暗主题

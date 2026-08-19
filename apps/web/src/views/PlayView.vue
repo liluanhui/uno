@@ -4,6 +4,9 @@ import { useRouter } from 'vue-router';
 import { useUno } from '../store';
 import type { CardT } from '../store';
 import UnoCard from '../components/UnoCard.vue';
+import CardBack from '../components/CardBack.vue';
+import UnoBurst from '../components/UnoBurst.vue';
+import DealOverlay from '../components/DealOverlay.vue';
 
 const store = useUno();
 const router = useRouter();
@@ -46,7 +49,7 @@ function isCurrent(playerId: string): boolean {
   return game.value?.players[currentIdx.value]?.id === playerId;
 }
 
-const emojis = ['👍', '😂', '😱', '😡', '🎉', '👋'];
+const activeColorClass = computed(() => `ac-${game.value?.activeColor || 'wild'}`);
 
 // 剩 1 张时自动提醒喊 UNO（2.5s 后自动喊，可提前手动）
 watch(unoHot, (hot) => {
@@ -62,6 +65,58 @@ watch(unoHot, (hot) => {
     });
   }
 });
+
+// ---------- 弃牌堆「凌乱堆叠」----------
+const discardHistory = ref<CardT[]>([]);
+
+watch(
+  () => store.dealing,
+  (d) => {
+    if (d) discardHistory.value = [];
+  },
+);
+
+watch(
+  () => game.value?.topCard,
+  (nv, ov) => {
+    if (nv && ov && nv.id !== ov.id) {
+      discardHistory.value = [ov, ...discardHistory.value].slice(0, 6);
+    } else if (nv && !ov) {
+      discardHistory.value = [];
+    }
+  },
+);
+
+// 以牌 id 为种子的稳定伪随机，堆叠角度/偏移不闪烁
+function seed(id: string, salt: number): number {
+  let h = 2166136261 ^ salt;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return ((h >>> 0) % 1000) / 1000;
+}
+
+function stackStyle(id: string, i: number) {
+  const rot = (seed(id, 1) - 0.5) * 44;
+  const dx = (seed(id, 2) - 0.5) * 26;
+  const dy = (seed(id, 3) - 0.5) * 20;
+  const z = 10 + i;
+  return { transform: `rotate(${rot}deg) translate(${dx}px, ${dy}px)`, zIndex: z };
+}
+
+// ---------- UNO 爆炸特效 ----------
+const burstFx = ref<{ id: number; name: string } | null>(null);
+watch(
+  () => store.unoFx,
+  (fx) => {
+    if (!fx) return;
+    burstFx.value = { id: fx.id, name: fx.name };
+    setTimeout(() => {
+      if (burstFx.value?.id === fx.id) burstFx.value = null;
+    }, 1750);
+  },
+);
 
 function onCardClick(card: CardT) {
   if (!game.value?.isYourTurn) {
@@ -124,6 +179,19 @@ function avatarColor(name: string): string {
   return colors[h % 4];
 }
 
+// 对手牌背扇形
+function fanCards(count: number) {
+  const n = Math.min(count, 5);
+  return Array.from({ length: n }, (_, i) => {
+    const mid = (n - 1) / 2;
+    return {
+      rot: (i - mid) * 9,
+      dy: Math.abs(i - mid) * 3,
+      z: i,
+    };
+  });
+}
+
 const ruleLabels: Record<string, string> = {
   stackDraw: '叠 +2/+4',
   sevenZero: '七换零',
@@ -178,6 +246,9 @@ const ruleLabels: Record<string, string> = {
     </div>
   </div>
 
+  <!-- 洗牌发牌动效 -->
+  <DealOverlay v-else-if="store.dealing" :player-count="room?.players.length || 2" />
+
   <!-- 对局页 -->
   <div v-else-if="game" class="play-wrap">
     <div class="seats">
@@ -187,10 +258,8 @@ const ruleLabels: Record<string, string> = {
         class="seat"
         :class="{ active: isCurrent(p.id), offline: !p.connected }"
       >
-        <div class="name">{{ p.name }}</div>
-        <div class="count">{{ p.count }} 张</div>
-        <div v-if="p.count === 1 && !p.calledUno" class="badge-uno">没喊UNO</div>
-        <div v-else-if="p.count === 1" class="badge-uno" style="background: var(--green)">UNO!</div>
+        <div class="badge-uno" v-if="game.phase === 'playing' && p.count === 1 && !p.calledUno">没喊UNO</div>
+        <div class="badge-uno called" v-else-if="p.count === 1">UNO!</div>
         <button
           v-if="game.phase === 'playing' && p.count === 1 && !p.calledUno"
           class="catch-btn"
@@ -198,52 +267,85 @@ const ruleLabels: Record<string, string> = {
         >
           抓！
         </button>
+        <div class="back-fan">
+          <div
+            v-for="f in fanCards(p.count)"
+            :key="f.z"
+            class="fan-bk"
+            :style="{ transform: `rotate(${f.rot}deg) translateY(${f.dy}px)`, zIndex: f.z }"
+          >
+            <CardBack size="sm" />
+          </div>
+          <span class="fan-count" :class="{ low: p.count === 1 }">× {{ p.count }}</span>
+        </div>
+        <div class="seat-info">
+          <div class="avatar sm" :style="{ background: avatarColor(p.name) }">
+            {{ p.isAi ? '🤖' : p.name.slice(0, 1) }}
+          </div>
+          <div class="name">{{ p.name }}</div>
+        </div>
       </div>
     </div>
 
     <div class="table-area">
       <div class="status-row">
         <span class="direction" :class="{ ccw: game.direction === -1 }">{{ game.direction === 1 ? '↻' : '↺' }}</span>
+        <span class="color-dot" :class="activeColorClass" title="当前颜色"></span>
         <span v-if="game.pendingDraw > 0" class="pending-badge">待罚 +{{ game.pendingDraw }}</span>
         <span v-if="game.isYourTurn && game.phase === 'playing'" class="turn-banner">轮到你了</span>
         <span v-else-if="game.phase === 'playing'" class="muted">等待 {{ currentPlayerName }} 行动…</span>
       </div>
       <div class="piles">
-        <div class="draw-pile" :class="{ 'can-draw': canDraw }" @click="canDraw && store.drawCard()">
-          <strong>{{ game.drawCount }}</strong>
-          <span>摸牌堆</span>
+        <!-- 摸牌堆：堆叠牌背 -->
+        <div class="draw-stack" :class="{ 'can-draw': canDraw }" @click="canDraw && store.drawCard()">
+          <div class="stack-bk b1"><CardBack size="lg" /></div>
+          <div class="stack-bk b2"><CardBack size="lg" /></div>
+          <div class="stack-bk b3"><CardBack size="lg" /></div>
+          <span class="pile-count">{{ game.drawCount }}</span>
+          <span v-if="canDraw" class="draw-hint">点我摸牌</span>
         </div>
-        <div class="top-card-slot">
-          <UnoCard v-if="game.topCard" :card="game.topCard" />
+        <!-- 弃牌堆：凌乱堆叠 -->
+        <div class="discard-stack">
+          <div
+            v-for="(c, i) in discardHistory.slice(0, 5)"
+            :key="c.id"
+            class="disc-bk"
+            :style="stackStyle(c.id, i)"
+          >
+            <UnoCard :card="c" size="lg" />
+          </div>
+          <div v-if="game.topCard" :key="game.topCard.id" class="disc-top">
+            <UnoCard :card="game.topCard" size="lg" />
+          </div>
         </div>
       </div>
     </div>
 
     <div class="hand-area">
-      <div class="hand">
-        <UnoCard
+      <TransitionGroup name="handcard" tag="div" class="hand">
+        <div
           v-for="c in myHand"
           :key="c.id"
-          :card="c"
-          :playable="game.isYourTurn && playableIds.has(c.id)"
-          :dim="game.isYourTurn && !playableIds.has(c.id)"
+          class="hand-cell"
+          :class="{
+            playable: game.isYourTurn && playableIds.has(c.id),
+            dim: game.isYourTurn && !playableIds.has(c.id),
+          }"
           @click="onCardClick(c)"
-        />
-      </div>
+        >
+          <UnoCard :card="c" size="md" />
+        </div>
+      </TransitionGroup>
     </div>
 
     <div class="action-bar">
       <button class="uno-btn" :class="{ hot: unoHot }" @click="store.callUno()">UNO!</button>
       <button class="ghost" :disabled="!canPass" @click="store.passTurn()">过</button>
-      <div class="emoji-bar">
-        <button v-for="e in emojis" :key="e" @click="store.chat(e)">{{ e }}</button>
-      </div>
+      <span class="hand-total">{{ myHand.length }} 张</span>
     </div>
 
-    <!-- 聊天气泡 -->
-    <div class="chat-float">
-      <div v-for="c in store.chats" :key="c.id" class="chat-bubble">{{ c.name }}：{{ c.emoji }}</div>
-    </div>
+    <!-- UNO 爆炸特效（全屏，所有玩家可见） -->
+    <UnoBurst :fx="burstFx" />
 
     <!-- 变色选择 -->
     <div v-if="showColorPicker" class="overlay" @click.self="showColorPicker = false">

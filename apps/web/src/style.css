@@ -1,33 +1,42 @@
 :root {
-  --bg: #f4f4f7;
+  --bg: #eef0f6;
+  --bg-grad: radial-gradient(120% 90% at 50% 0%, #f7f8fc 0%, #e7eaf3 48%, #dfe3ee 100%);
   --surface: #ffffff;
-  --surface-2: #eceef2;
+  --surface-2: #eceef4;
   --text: #1c1d24;
   --text-muted: #7a7c88;
   --border: rgba(28, 29, 36, 0.1);
   --accent: #534ab7;
+  --accent-grad: linear-gradient(135deg, #6a5fd0 0%, #4a41a8 100%);
   --danger: #e24b4a;
-  --red: #e24b4a;
-  --red-dark: #b73232;
-  --blue: #378add;
-  --blue-dark: #1d6bc0;
-  --green: #56a22c;
-  --green-dark: #3d7a1c;
-  --yellow: #f0a92b;
-  --yellow-dark: #c7820e;
+  --red: #e9403b;
+  --red-dark: #b52a26;
+  --blue: #0a8fdd;
+  --blue-dark: #0a6fae;
+  --green: #3faa28;
+  --green-dark: #2f811b;
+  --yellow: #f5be18;
+  --yellow-dark: #cc9a06;
   --wild: #3a3b45;
-  --shadow: 0 4px 16px rgba(28, 29, 36, 0.08);
+  --felt: radial-gradient(90% 100% at 50% 30%, #ffffff 0%, #eef0f7 55%, #e2e6f0 100%);
+  --felt-border: rgba(83, 74, 183, 0.16);
+  --shadow: 0 6px 24px rgba(28, 29, 36, 0.1);
+  --shadow-lg: 0 12px 40px rgba(28, 29, 36, 0.16);
 }
 
 [data-theme='dark'] {
-  --bg: #14151b;
+  --bg: #101118;
+  --bg-grad: radial-gradient(120% 90% at 50% 0%, #181a24 0%, #12131b 55%, #0c0d13 100%);
   --surface: #1e1f28;
   --surface-2: #2a2b36;
   --text: #f0f1f5;
   --text-muted: #9a9ca8;
   --border: rgba(255, 255, 255, 0.1);
   --wild: #14151b;
-  --shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --felt: radial-gradient(90% 100% at 50% 30%, #1f4a35 0%, #173c2b 55%, #0f2d20 100%);
+  --felt-border: rgba(80, 220, 160, 0.14);
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 14px 44px rgba(0, 0, 0, 0.55);
 }
 
 * {
@@ -45,6 +54,8 @@ body {
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', 'Microsoft YaHei', sans-serif;
   background: var(--bg);
+  background-image: var(--bg-grad);
+  background-attachment: fixed;
   color: var(--text);
   font-size: 15px;
   line-height: 1.5;
@@ -65,7 +76,7 @@ button {
   padding: 12px 20px;
   background: var(--surface-2);
   color: var(--text);
-  transition: transform 0.12s ease, opacity 0.12s ease;
+  transition: transform 0.12s ease, opacity 0.12s ease, box-shadow 0.15s ease;
 }
 
 button:active {
@@ -78,9 +89,10 @@ button:disabled {
 }
 
 button.primary {
-  background: var(--accent);
+  background: var(--accent-grad);
   color: #fff;
   font-weight: 600;
+  box-shadow: 0 4px 14px rgba(83, 74, 183, 0.35);
 }
 
 button.ghost {
@@ -102,11 +114,13 @@ input {
 
 input:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(83, 74, 183, 0.15);
 }
 
 .card-panel {
   background: var(--surface);
   border-radius: 18px;
+  border: 1px solid var(--border);
   box-shadow: var(--shadow);
   padding: 18px;
 }
@@ -153,89 +167,6 @@ input:focus {
   border-radius: 10px;
 }
 
-/* ---------- 卡牌 ---------- */
-.uno-card {
-  position: relative;
-  border-radius: 10px;
-  width: 62px;
-  height: 92px;
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 800;
-  font-size: 30px;
-  user-select: none;
-  border: 3px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-  transition: transform 0.15s ease, filter 0.15s ease;
-}
-
-.uno-card.sm {
-  width: 34px;
-  height: 50px;
-  font-size: 15px;
-  border-width: 2px;
-  border-radius: 7px;
-}
-
-.uno-card .corner {
-  position: absolute;
-  top: 4px;
-  left: 6px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.uno-card.sm .corner {
-  display: none;
-}
-
-.uno-card.c-red { background: var(--red); }
-.uno-card.c-blue { background: var(--blue); }
-.uno-card.c-green { background: var(--green); }
-.uno-card.c-yellow { background: var(--yellow); }
-.uno-card.c-wild {
-  background: var(--wild);
-  display: flex;
-  gap: 3px;
-}
-
-.wild-quads {
-  display: inline-grid;
-  grid-template-columns: 12px 12px;
-  gap: 3px;
-}
-
-.wild-quads i {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  display: block;
-}
-
-.uno-card.sm .wild-quads i {
-  width: 7px;
-  height: 7px;
-}
-
-.uno-card.sm .wild-quads {
-  grid-template-columns: 7px 7px;
-  gap: 2px;
-}
-
-.card-plus {
-  position: absolute;
-  bottom: 6px;
-  right: 8px;
-  font-size: 11px;
-  font-weight: 700;
-  background: rgba(255, 255, 255, 0.22);
-  border-radius: 6px;
-  padding: 1px 5px;
-}
-
 /* ---------- 对局布局 ---------- */
 .play-wrap {
   flex: 1;
@@ -248,58 +179,109 @@ input:focus {
   margin: 0 auto;
 }
 
+/* ---------- 对手座位（牌背扇形） ---------- */
 .seats {
   display: flex;
   gap: 10px;
   justify-content: center;
-  padding: 6px 0;
+  padding: 10px 0 6px;
   flex: none;
 }
 
 .seat {
   background: var(--surface);
-  border-radius: 14px;
-  padding: 8px 12px;
+  border-radius: 16px;
+  padding: 10px 10px 8px;
   box-shadow: var(--shadow);
-  min-width: 86px;
+  border: 1px solid var(--border);
+  min-width: 104px;
   text-align: center;
   position: relative;
-  border: 2px solid transparent;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
 }
 
 .seat.active {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(83, 74, 183, 0.18), var(--shadow);
+  transform: translateY(-2px);
 }
 
 .seat.offline {
   opacity: 0.5;
 }
 
+.back-fan {
+  position: relative;
+  height: 52px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  margin-bottom: 6px;
+}
+
+.fan-bk {
+  position: relative;
+  transition: transform 0.3s ease;
+}
+
+.seat.active .fan-bk {
+  animation: fanBreathe 1.6s ease-in-out infinite;
+}
+
+.fan-count {
+  position: absolute;
+  right: 2px;
+  bottom: -4px;
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+}
+
+.fan-count.low {
+  background: var(--danger);
+  color: #fff;
+  border-color: transparent;
+  animation: pulse 1s infinite;
+}
+
+.seat-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+}
+
 .seat .name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  max-width: 90px;
+  max-width: 74px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.seat .count {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
 .seat .badge-uno {
   position: absolute;
-  top: -8px;
+  top: -9px;
   right: -6px;
   background: var(--danger);
   color: #fff;
   font-size: 10px;
   font-weight: 800;
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: 8px;
   animation: pulse 1s infinite;
+  z-index: 3;
+}
+
+.seat .badge-uno.called {
+  background: var(--green);
+  animation: unoBadgePop 0.45s cubic-bezier(0.2, 1.4, 0.3, 1.2);
 }
 
 .catch-btn {
@@ -310,11 +292,14 @@ input:focus {
   background: var(--danger);
   color: #fff;
   font-size: 11px;
-  padding: 3px 10px;
+  padding: 3px 12px;
   border-radius: 8px;
   font-weight: 700;
+  z-index: 3;
+  box-shadow: 0 3px 10px rgba(226, 75, 74, 0.4);
 }
 
+/* ---------- 桌面（felt） ---------- */
 .table-area {
   flex: 1;
   min-height: 0;
@@ -322,47 +307,30 @@ input:focus {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
   position: relative;
+  background: var(--felt);
+  border: 1px solid var(--felt-border);
+  border-radius: 24px;
+  margin: 4px 0;
+  padding: 14px 10px;
+  box-shadow: inset 0 2px 18px rgba(0, 0, 0, 0.08), var(--shadow);
+  overflow: hidden;
+}
+
+.table-area::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 24px;
+  pointer-events: none;
+  background: radial-gradient(80% 60% at 50% 0%, rgba(255, 255, 255, 0.14), transparent 60%);
 }
 
 .piles {
   display: flex;
   align-items: center;
-  gap: 26px;
-}
-
-.draw-pile {
-  width: 72px;
-  height: 106px;
-  border-radius: 12px;
-  background: var(--surface-2);
-  border: 2px dashed var(--border);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.draw-pile.can-draw {
-  border-color: var(--accent);
-  color: var(--accent);
-  font-weight: 700;
-  animation: pulse 1.4s infinite;
-}
-
-.draw-pile strong {
-  font-size: 20px;
-  color: inherit;
-}
-
-.top-card-slot .uno-card {
-  width: 72px;
-  height: 106px;
-  font-size: 34px;
+  gap: 34px;
 }
 
 .status-row {
@@ -371,16 +339,35 @@ input:focus {
   gap: 12px;
   font-size: 13px;
   color: var(--text-muted);
+  z-index: 2;
 }
 
 .direction {
   font-size: 20px;
-  transition: transform 0.4s ease;
+  display: inline-block;
+  animation: spinSlow 7s linear infinite;
+  color: var(--text);
 }
 
 .direction.ccw {
-  transform: scaleX(-1);
+  animation: spinSlowRev 7s linear infinite;
 }
+
+.color-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+  animation: dotPop 0.4s ease;
+}
+
+.color-dot.ac-red { background: var(--red); }
+.color-dot.ac-blue { background: var(--blue); }
+.color-dot.ac-green { background: var(--green); }
+.color-dot.ac-yellow { background: var(--yellow); }
+.color-dot.ac-wild { background: conic-gradient(var(--red) 0 25%, var(--blue) 0 50%, var(--yellow) 0 75%, var(--green) 0); }
 
 .pending-badge {
   background: var(--danger);
@@ -399,44 +386,146 @@ input:focus {
   animation: pulse 1.2s infinite;
 }
 
+/* ---------- 摸牌堆 ---------- */
+.draw-stack {
+  position: relative;
+  width: 78px;
+  height: 132px;
+  cursor: pointer;
+}
+
+.stack-bk {
+  position: absolute;
+  inset: 0;
+  transition: transform 0.2s ease;
+}
+
+.stack-bk.b1 { transform: rotate(-7deg) translate(-5px, 3px); }
+.stack-bk.b2 { transform: rotate(5deg) translate(4px, 1px); }
+.stack-bk.b3 { transform: rotate(-1deg); z-index: 2; }
+
+.draw-stack.can-draw .stack-bk.b3 {
+  animation: deckInvite 1.4s ease-in-out infinite;
+}
+
+.draw-stack.can-draw:active .stack-bk.b3 {
+  transform: rotate(-1deg) scale(0.94);
+}
+
+.pile-count {
+  position: absolute;
+  bottom: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--surface);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 9px;
+  z-index: 4;
+}
+
+.draw-hint {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+  animation: pulse 1.4s infinite;
+}
+
+/* ---------- 弃牌堆（凌乱堆叠） ---------- */
+.discard-stack {
+  position: relative;
+  width: 96px;
+  height: 138px;
+}
+
+.disc-bk,
+.disc-top {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin: -58px 0 0 -39px;
+}
+
+.disc-top {
+  z-index: 30;
+  animation: flyToDiscard 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.15);
+}
+
 /* ---------- 手牌 ---------- */
 .hand-area {
   flex: none;
-  padding: 10px 0 4px;
+  padding: 12px 0 4px;
 }
 
 .hand {
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding: 14px 4px 10px;
+  padding: 16px 4px 12px;
   scroll-snap-type: x proximity;
+  min-height: 126px;
+  align-items: flex-end;
 }
 
 .hand::-webkit-scrollbar {
   display: none;
 }
 
-.hand .uno-card {
+.hand-cell {
   scroll-snap-align: center;
+  position: relative;
+  transition: transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.3), filter 0.18s ease;
 }
 
-.hand .uno-card.playable {
-  transform: translateY(-10px);
+.hand-cell.playable {
+  transform: translateY(-12px);
   cursor: pointer;
 }
 
-.hand .uno-card.playable::after {
+.hand-cell.playable::after {
   content: '';
   position: absolute;
-  inset: -6px;
+  inset: -7px;
   border-radius: 14px;
   border: 2px solid var(--accent);
   opacity: 0.55;
+  box-shadow: 0 0 14px rgba(83, 74, 183, 0.35);
 }
 
-.hand .uno-card.dim {
-  filter: grayscale(0.55) brightness(0.8);
+.hand-cell.dim :deep(.uno-card) {
+  filter: grayscale(0.6) brightness(0.72);
+}
+
+/* 手牌进出动效：摸牌从右上飞入，出牌向上飞向弃牌堆 */
+.handcard-enter-active {
+  transition: all 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.handcard-enter-from {
+  transform: translate(90px, -60px) rotate(24deg) scale(0.7);
+  opacity: 0;
+}
+
+.handcard-leave-active {
+  transition: all 0.32s cubic-bezier(0.5, 0, 0.8, 0.4);
+  position: absolute;
+}
+
+.handcard-leave-to {
+  transform: translateY(-150px) scale(0.85) rotate(-10deg);
+  opacity: 0;
+}
+
+.handcard-move {
+  transition: transform 0.35s ease;
 }
 
 /* ---------- 操作条 ---------- */
@@ -449,31 +538,26 @@ input:focus {
 }
 
 .uno-btn {
-  background: var(--danger);
+  background: linear-gradient(135deg, #f4534e 0%, #c7201c 100%);
   color: #fff;
   font-weight: 900;
   font-size: 17px;
-  padding: 12px 22px;
+  padding: 12px 24px;
   border-radius: 999px;
   letter-spacing: 1px;
+  box-shadow: 0 5px 18px rgba(226, 75, 74, 0.45);
 }
 
 .uno-btn.hot {
-  animation: pulse 0.7s infinite;
+  animation: unoBtnBeat 0.7s infinite;
   font-size: 19px;
 }
 
-.emoji-bar {
+.hand-total {
   margin-left: auto;
-  display: flex;
-  gap: 4px;
-}
-
-.emoji-bar button {
-  padding: 8px 10px;
-  font-size: 18px;
-  background: transparent;
-  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
 }
 
 /* ---------- 覆盖层 ---------- */
@@ -481,11 +565,13 @@ input:focus {
   position: fixed;
   inset: 0;
   background: rgba(10, 10, 16, 0.55);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 50;
   padding: 20px;
+  animation: overlayIn 0.2s ease;
 }
 
 .dialog {
@@ -493,8 +579,9 @@ input:focus {
   border-radius: 20px;
   padding: 24px;
   width: min(400px, 92vw);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-lg);
   text-align: center;
+  animation: dialogPop 0.28s cubic-bezier(0.2, 1.2, 0.3, 1.1);
 }
 
 .color-grid {
@@ -510,6 +597,7 @@ input:focus {
   font-size: 17px;
   font-weight: 800;
   color: #fff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
 }
 
 .target-list {
@@ -534,28 +622,6 @@ input:focus {
   flex-wrap: wrap;
 }
 
-/* ---------- 聊天气泡 ---------- */
-.chat-float {
-  position: fixed;
-  bottom: 130px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  z-index: 40;
-  pointer-events: none;
-}
-
-.chat-bubble {
-  background: var(--surface);
-  border-radius: 999px;
-  padding: 6px 14px;
-  font-size: 14px;
-  box-shadow: var(--shadow);
-  animation: rise 0.25s ease;
-}
-
 /* ---------- toast ---------- */
 .toast-wrap {
   position: fixed;
@@ -576,27 +642,6 @@ input:focus {
   border-radius: 999px;
   font-size: 14px;
   animation: rise 0.25s ease;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.55;
-  }
-}
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 /* ---------- 房间等待页 ---------- */
@@ -633,6 +678,7 @@ input:focus {
   background: var(--surface-2);
   border-radius: 14px;
   padding: 12px 14px;
+  animation: rise 0.3s ease;
 }
 
 .avatar {
@@ -646,6 +692,12 @@ input:focus {
   color: #fff;
   font-size: 15px;
   flex: none;
+}
+
+.avatar.sm {
+  width: 26px;
+  height: 26px;
+  font-size: 13px;
 }
 
 .ready-tag {
@@ -663,7 +715,7 @@ input:focus {
   color: var(--text-muted);
 }
 
-/* ---------- 首页 ---------- */
+/* ---------- 首页（入口式大厅） ---------- */
 .home-wrap {
   flex: 1;
   overflow-y: auto;
@@ -678,13 +730,37 @@ input:focus {
 
 .hero {
   text-align: center;
-  padding: 18px 0 4px;
+  padding: 14px 0 4px;
 }
 
+.hero-cards {
+  height: 76px;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+
+.hero-cards .hc {
+  position: absolute;
+  top: 0;
+  animation: heroFloat 5s ease-in-out infinite;
+}
+
+.hero-cards .hc1 { transform: rotate(-18deg) translateX(-64px) translateY(8px); animation-delay: 0s; }
+.hero-cards .hc2 { transform: rotate(-6deg) translateX(-22px) translateY(0); animation-delay: 0.6s; }
+.hero-cards .hc3 { transform: rotate(7deg) translateX(22px) translateY(2px); animation-delay: 1.2s; }
+.hero-cards .hc4 { transform: rotate(19deg) translateX(64px) translateY(10px); animation-delay: 1.8s; }
+
 .hero h1 {
-  font-size: 44px;
+  font-size: 46px;
   margin: 8px 0 4px;
-  letter-spacing: 4px;
+  letter-spacing: 5px;
+  background: linear-gradient(100deg, var(--red) 8%, var(--yellow) 35%, var(--green) 62%, var(--blue) 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-style: italic;
 }
 
 .hero p {
@@ -692,6 +768,105 @@ input:focus {
   margin: 0;
 }
 
+/* 入口 tile */
+.entries {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.entry-tile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.entry-tile:active {
+  transform: scale(0.98);
+}
+
+.entry-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+}
+
+.entry-tile.t-solo::before { background: var(--red); }
+.entry-tile.t-create::before { background: var(--blue); }
+.entry-tile.t-join::before { background: var(--yellow); }
+
+.entry-tile.open {
+  box-shadow: var(--shadow-lg), 0 0 0 2px var(--accent);
+}
+
+.tile-card {
+  flex: none;
+  transition: transform 0.3s ease;
+}
+
+.entry-tile:hover .tile-card,
+.entry-tile.open .tile-card {
+  transform: rotate(-6deg) translateY(-3px);
+}
+
+.tile-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.tile-title {
+  font-weight: 800;
+  font-size: 17px;
+}
+
+.tile-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.tile-arrow {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.panel-box {
+  animation: panelIn 0.3s cubic-bezier(0.2, 1, 0.3, 1.1);
+}
+
+.panel-enter-active,
+.panel-leave-active {
+  transition: all 0.28s cubic-bezier(0.2, 1, 0.3, 1.1);
+}
+
+.panel-enter-from,
+.panel-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.98);
+}
+
+.nick-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.nick-panel .muted {
+  flex: none;
+}
+
+/* ---------- 通用 ---------- */
 .section-title {
   font-weight: 700;
   margin: 4px 0 8px;
@@ -714,7 +889,7 @@ input:focus {
 }
 
 .seg button.on {
-  background: var(--accent);
+  background: var(--accent-grad);
   color: #fff;
   font-weight: 700;
 }
@@ -759,4 +934,119 @@ input:focus {
 
 .switch.on i {
   left: 21px;
+}
+
+/* ---------- 动画 ---------- */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes flyToDiscard {
+  0% {
+    transform: translateY(52px) translateX(-40px) scale(1.25) rotate(-24deg);
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) translateX(0) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes deckInvite {
+  0%,
+  100% {
+    transform: rotate(-1deg) translateY(0);
+  }
+  50% {
+    transform: rotate(-1deg) translateY(-7px);
+  }
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes spinSlowRev {
+  from { transform: scaleX(-1) rotate(0deg); }
+  to { transform: scaleX(-1) rotate(360deg); }
+}
+
+@keyframes dotPop {
+  0% { transform: scale(0.4); }
+  60% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+
+@keyframes fanBreathe {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes unoBadgePop {
+  0% { transform: scale(0.3); }
+  60% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+
+@keyframes unoBtnBeat {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 5px 18px rgba(226, 75, 74, 0.45);
+  }
+  50% {
+    transform: scale(1.08);
+    box-shadow: 0 8px 26px rgba(226, 75, 74, 0.65);
+  }
+}
+
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dialogPop {
+  0% { transform: scale(0.85); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes heroFloat {
+  0%,
+  100% {
+    margin-top: 0;
+  }
+  50% {
+    margin-top: -5px;
+  }
 }

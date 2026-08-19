@@ -1,7 +1,7 @@
 /* 端到端冒烟测试：人机 1V1 完整对局 + 双人房间关键流程 */
 const { io } = require('/Users/muyi/Desktop/code/uno/apps/web/node_modules/socket.io-client');
 
-const URL = 'http://localhost:3001';
+const URL = process.env.API_URL || 'http://localhost:5002';
 const log = (...a) => console.log('[smoke]', ...a);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

@@ -237,6 +237,8 @@ export class RoomService {
     for (const p of room.players) p.ready = false;
     this.logger.log(`房间 ${room.code} 开始对局，${room.players.length} 名玩家`);
     this.broadcastRoomState(room);
+    // 先广播发牌动画事件，客户端播完洗牌/发牌动效再亮出牌桌
+    this.emitToRoom(room, 'game:dealing', { players: room.players.length });
     this.broadcastGameState(room, []);
     this.afterTurn(room);
   }
@@ -274,14 +276,6 @@ export class RoomService {
     const room = this.requireGame(code);
     const events = room.game!.catchUno(userId, targetId);
     this.broadcastGameState(room, events);
-  }
-
-  chat(code: string, userId: string, emoji: string) {
-    const room = this.getRoom(code);
-    if (!room || !this.server) return;
-    const player = room.players.find((p) => p.userId === userId);
-    if (!player) return;
-    this.emitToRoom(room, 'game:chat', { userId, name: player.name, emoji: String(emoji).slice(0, 8) });
   }
 
   private requireGame(code: string): Room {
@@ -350,6 +344,11 @@ export class RoomService {
         } else {
           events = game.pass(cur.id);
         }
+        // AI 剩 1 张时大概率自动喊 UNO（少数情况漏喊，可被玩家抓）
+        const aiPlayer = game.players.find((p) => p.id === cur.id);
+        if (game.phase === 'playing' && aiPlayer && aiPlayer.hand.length === 1 && !aiPlayer.calledUno) {
+          if (Math.random() < 0.85) events = [...events, ...game.callUno(cur.id)];
+        }
         this.broadcastGameState(room, events);
         this.afterTurn(room);
       } catch (e) {
@@ -386,6 +385,13 @@ export class RoomService {
 
   broadcastGameState(room: Room, events: unknown[]) {
     if (!this.server) return;
+    // UNO 宣言 → 全房间广播特效事件（所有玩家屏幕播放 UNO 爆炸）
+    for (const ev of events as { type?: string; playerId?: string }[]) {
+      if (ev?.type === 'unoCalled' && ev.playerId) {
+        const p = room.players.find((x) => x.userId === ev.playerId);
+        this.emitToRoom(room, 'game:uno', { userId: ev.playerId, name: p?.name || '' });
+      }
+    }
     for (const player of room.players) {
       if (player.isAi || !player.socketId) continue;
       const socket = this.server.sockets.sockets.get(player.socketId);

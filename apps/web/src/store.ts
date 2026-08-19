@@ -36,16 +36,15 @@ export interface GameViewT {
   scores: Record<string, number>;
 }
 
-export interface ChatBubble {
+export interface UnoFx {
   id: number;
   userId: string;
   name: string;
-  emoji: string;
 }
 
 let socket: Socket | null = null;
 let toastSeq = 0;
-let chatSeq = 0;
+let fxSeq = 0;
 
 export const useUno = defineStore('uno', {
   state: () => ({
@@ -57,9 +56,10 @@ export const useUno = defineStore('uno', {
     game: null as GameViewT | null,
     lastEvents: [] as any[],
     toasts: [] as { id: number; text: string }[],
-    chats: [] as ChatBubble[],
     pendingWildCard: null as CardT | null,
     pendingSwapCard: null as CardT | null,
+    dealing: false,
+    unoFx: null as UnoFx | null,
   }),
   getters: {
     myId(state): string {
@@ -88,12 +88,14 @@ export const useUno = defineStore('uno', {
         this.pendingWildCard = null;
         this.pendingSwapCard = null;
       });
-      socket.on('game:chat', (data: { userId: string; name: string; emoji: string }) => {
-        const bubble: ChatBubble = { id: ++chatSeq, ...data };
-        this.chats.push(bubble);
-        setTimeout(() => {
-          this.chats = this.chats.filter((c) => c.id !== bubble.id);
-        }, 3000);
+      // 开局：洗牌发牌动效（约 2.8s 后亮出牌桌）
+      socket.on('game:dealing', () => {
+        this.dealing = true;
+        setTimeout(() => (this.dealing = false), 2800);
+      });
+      // 有人喊 UNO：全屏爆炸特效
+      socket.on('game:uno', (data: { userId: string; name: string }) => {
+        this.unoFx = { id: ++fxSeq, userId: data.userId, name: data.name || '有人' };
       });
       socket.on('error', (e: { code: string; message: string }) => {
         this.toast(e.message || '出错了');
@@ -131,7 +133,8 @@ export const useUno = defineStore('uno', {
       socket?.emit('room:leave');
       this.room = null;
       this.game = null;
-      this.chats = [];
+      this.dealing = false;
+      this.unoFx = null;
     },
     restart() {
       socket?.emit('room:restart');
@@ -150,9 +153,6 @@ export const useUno = defineStore('uno', {
     },
     catchUno(targetId: string) {
       socket?.emit('game:catchUno', { targetId });
-    },
-    chat(emoji: string) {
-      socket?.emit('game:chat', { emoji });
     },
   },
 });
