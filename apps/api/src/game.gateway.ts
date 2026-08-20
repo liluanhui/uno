@@ -85,9 +85,10 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         difficulty: payload?.difficulty,
       });
       this.join(client, room.code);
+      // 先告知房间号，再进房（进房可能立即触发 solo 开局广播）
+      client.emit('room:created', { code: room.code });
       // 创建者进入房间（绑定 socket、触发 solo 自动开局 / 满员自动开始）
       this.rooms.joinRoom(room.code, user, client.id);
-      client.emit('room:created', { code: room.code });
       this.rooms.broadcastRoomState(room);
       if (room.game) this.rooms.sendGameStateTo(room, client.id, user.id);
     } catch (e) {

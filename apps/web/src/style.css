@@ -997,6 +997,16 @@ input:focus {
   100% { transform: scale(1); }
 }
 
+/* 连接/续局加载指示 */
+.dealing-spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent);
+  animation: spinSlow 0.9s linear infinite;
+}
+
 @keyframes fanBreathe {
   0%,
   100% {

@@ -52,6 +52,7 @@ export const useUno = defineStore('uno', {
     userId: '',
     name: localStorage.getItem('uno.name') || '',
     connected: false,
+    resuming: false,
     room: null as RoomStateT | null,
     game: null as GameViewT | null,
     lastEvents: [] as any[],
@@ -70,7 +71,15 @@ export const useUno = defineStore('uno', {
     connect() {
       if (socket) return;
       socket = io({ auth: { token: this.token || undefined, name: this.name || undefined } });
-      socket.on('connect', () => (this.connected = true));
+      socket.on('connect', () => {
+        this.connected = true;
+        // 刷新/断线重连后自动回到上次的房间（服务端按 token 识别身份并重新绑定 socket）
+        const code = this.room?.code || localStorage.getItem('uno.room') || '';
+        if (code) {
+          this.resuming = !this.room;
+          socket!.emit('room:join', { code });
+        }
+      });
       socket.on('disconnect', () => (this.connected = false));
       socket.on('identity', (data: { token: string; userId: string; name: string; isNew: boolean }) => {
         this.token = data.token;
@@ -81,6 +90,8 @@ export const useUno = defineStore('uno', {
       });
       socket.on('room:state', (room: RoomStateT) => {
         this.room = room;
+        this.resuming = false;
+        localStorage.setItem('uno.room', room.code);
       });
       socket.on('game:state', (payload: { events: any[]; state: GameViewT }) => {
         this.game = payload.state;
@@ -99,10 +110,18 @@ export const useUno = defineStore('uno', {
       });
       socket.on('error', (e: { code: string; message: string }) => {
         this.toast(e.message || '出错了');
+        // 续局失败（房间已回收等）：清除本地房间号，避免每次重连都失败
+        if (this.resuming || !this.room) {
+          if (['room_not_found', 'room_started', 'room_full'].includes(e.code)) {
+            this.resuming = false;
+            localStorage.removeItem('uno.room');
+          }
+        }
       });
       socket.on('room:left', () => {
         this.room = null;
         this.game = null;
+        localStorage.removeItem('uno.room');
       });
     },
     toast(text: string) {
@@ -135,6 +154,7 @@ export const useUno = defineStore('uno', {
       this.game = null;
       this.dealing = false;
       this.unoFx = null;
+      localStorage.removeItem('uno.room');
     },
     restart() {
       socket?.emit('room:restart');

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useUno } from '../store';
 import type { CardT } from '../store';
@@ -50,6 +50,17 @@ function isCurrent(playerId: string): boolean {
 }
 
 const activeColorClass = computed(() => `ac-${game.value?.activeColor || 'wild'}`);
+
+// 刷新续局：若 8 秒内仍拿不到房间状态（房间已回收/服务重启），自动回大厅
+onMounted(() => {
+  setTimeout(() => {
+    if (!store.room && !store.game) {
+      store.toast('对局房间已失效，请重新开始');
+      localStorage.removeItem('uno.room');
+      router.replace('/');
+    }
+  }, 8000);
+});
 
 // 剩 1 张时自动提醒喊 UNO（2.5s 后自动喊，可提前手动）
 watch(unoHot, (hot) => {
@@ -394,7 +405,10 @@ const ruleLabels: Record<string, string> = {
 
   <!-- 加载中 -->
   <div v-else class="play-wrap" style="justify-content: center; align-items: center">
-    <p class="muted">连接中…</p>
+    <div style="text-align: center">
+      <div class="dealing-spinner" style="margin: 0 auto 14px"></div>
+      <p class="muted">{{ store.resuming ? '正在重连续局…' : '连接中…' }}</p>
+    </div>
   </div>
 </template>
 
