@@ -6,7 +6,7 @@
     "build:engine": "pnpm --filter @uno/engine build",
     "test:engine": "pnpm --filter @uno/engine test",
     "build:api": "pnpm build:engine && pnpm --filter @uno/api build",
-    "dev:api": "pnpm --filter @uno/api dev",
+    "dev:api": "pnpm build:engine && pnpm --filter @uno/api dev",
     "dev:web": "pnpm --filter @uno/web dev",
     "build:web": "pnpm build:engine && pnpm --filter @uno/web build"
   }

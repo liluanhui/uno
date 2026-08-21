@@ -1,12 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Server } from 'socket.io';
-import { aiChoose, DEFAULT_RULES, GameError, HouseRules, UnoGame } from '@uno/engine';
+import { randomBytes, randomUUID } from 'crypto';
+import { DEFAULT_RULES, GameError, HouseRules, RealColor, UnoGame } from '@uno/engine';
+import type { GameEvent } from '@uno/engine';
 
 const TURN_TIMEOUT_MS = 30_000;
 const AI_DELAY_MIN = 700;
 const AI_DELAY_MAX = 1400;
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const ROOM_TTL_MS = 5 * 60_000;
+const VALID_COLORS: RealColor[] = ['red', 'yellow', 'green', 'blue'];
 
 export interface User {
   id: string;
@@ -29,6 +32,7 @@ export interface Room {
   hostId: string;
   maxPlayers: number;
   rules: HouseRules;
+  difficulty: 'easy' | 'normal';
   players: RoomPlayer[];
   game: UnoGame | null;
   started: boolean;
@@ -75,6 +79,8 @@ export class RoomService {
   private users = new Map<string, User>(); // token -> user
   private userIds = new Map<string, User>(); // userId -> user
   private rooms = new Map<string, Room>();
+  /** 在线连接引用计数（userId -> 活跃 socket 数），用于安全回收用户记录 */
+  private onlineCount = new Map<string, number>();
 
   setServer(server: Server) {
     this.server = server;
@@ -88,21 +94,55 @@ export class RoomService {
   }
 
   createUser(rawName?: string): User {
-    const id = 'u' + Math.random().toString(36).slice(2, 10);
-    const token = 'tk_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const id = 'u' + randomUUID().slice(0, 8);
+    const token = 'tk_' + randomBytes(24).toString('hex');
     const user: User = { id, name: this.sanitizeName(rawName) || `玩家${id.slice(1, 5).toUpperCase()}`, token };
     this.users.set(token, user);
     this.userIds.set(id, user);
     return user;
   }
 
+  markOnline(userId: string) {
+    this.onlineCount.set(userId, (this.onlineCount.get(userId) || 0) + 1);
+  }
+
+  markOffline(userId: string) {
+    const c = (this.onlineCount.get(userId) || 0) - 1;
+    if (c <= 0) this.onlineCount.delete(userId);
+    else this.onlineCount.set(userId, c);
+  }
+
+  /** 回收不在任何房间且已离线的用户记录，防止 users Map 无限增长 */
+  gcUser(userId: string) {
+    if (this.onlineCount.has(userId)) return; // 仍在线
+    for (const room of this.rooms.values()) {
+      if (room.players.some((p) => p.userId === userId)) return; // 仍在房间（重连窗口）
+    }
+    const user = this.userIds.get(userId);
+    if (!user) return;
+    this.userIds.delete(userId);
+    this.users.delete(user.token);
+  }
+
   rename(userId: string, name: string) {
     const user = this.userIds.get(userId);
-    if (user) user.name = this.sanitizeName(name) || user.name;
+    if (!user) return;
+    user.name = this.sanitizeName(name) || user.name;
+    // 同步到所有房间里的玩家副本，避免改名后房内仍显示旧名
+    for (const room of this.rooms.values()) {
+      const rp = room.players.find((p) => p.userId === userId);
+      if (rp) rp.name = user.name;
+    }
   }
 
   private sanitizeName(name?: string): string {
     return (name || '').trim().slice(0, 12);
+  }
+
+  private parseColor(c?: string): RealColor | undefined {
+    if (!c) return undefined;
+    if (!VALID_COLORS.includes(c as RealColor)) throw new GameError('bad_color', '颜色非法');
+    return c as RealColor;
   }
 
   // ---------- 房间 ----------
@@ -114,6 +154,7 @@ export class RoomService {
     const mode = opts.mode === 'solo' ? 'solo' : 'room';
     const maxPlayers = mode === 'solo' ? 2 : Math.min(4, Math.max(2, opts.maxPlayers ?? 2));
     const rules: HouseRules = { ...DEFAULT_RULES, ...(opts.rules || {}) };
+    const difficulty: 'easy' | 'normal' = opts.difficulty === 'easy' ? 'easy' : 'normal';
     let code = '';
     do {
       code = Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
@@ -124,6 +165,7 @@ export class RoomService {
       hostId: host.id,
       maxPlayers,
       rules,
+      difficulty,
       players: [
         { userId: host.id, name: host.name, isAi: false, connected: false, ready: mode === 'solo', socketId: null },
       ],
@@ -135,7 +177,7 @@ export class RoomService {
       createdAt: Date.now(),
     };
     if (mode === 'solo') {
-      const aiName = opts.difficulty === 'easy' ? 'UNO 新手机器人' : 'UNO 机器人';
+      const aiName = difficulty === 'easy' ? 'UNO 新手机器人' : 'UNO 机器人';
       room.players.push({ userId: `ai:${code}`, name: aiName, isAi: true, connected: true, ready: true, socketId: null });
     }
     this.rooms.set(code, room);
@@ -151,13 +193,13 @@ export class RoomService {
     if (!room) throw new GameError('room_not_found', '房间不存在');
     let player = room.players.find((p) => p.userId === user.id);
     if (player) {
-      // 重连
+      // 重连：先清理可能残留的托管定时器，避免孤儿 turnTimer 重复出牌
       player.connected = true;
       player.socketId = socketId;
+      this.clearTimer(room, 'turnTimer');
+      this.clearTimer(room, 'aiTimer');
       this.clearTimer(room, 'cleanupTimer');
-      // 若正处于托管中且轮到该玩家，交还控制权
       if (room.game && room.game.phase === 'playing' && room.game.current.id === user.id) {
-        this.clearTimer(room, 'aiTimer');
         this.scheduleTurn(room);
       }
     } else {
@@ -187,9 +229,9 @@ export class RoomService {
     this.broadcastRoomState(room);
     const anyConnected = room.players.some((p) => !p.isAi && p.connected);
     if (!anyConnected) {
-      // 无人在线，稍后回收
+      // 无人在线，稍后回收房间
       this.clearTimer(room, 'cleanupTimer');
-      room.cleanupTimer = setTimeout(() => this.rooms.delete(room.code), ROOM_TTL_MS);
+      room.cleanupTimer = setTimeout(() => this.destroyRoom(room), ROOM_TTL_MS);
     } else if (room.started && room.game?.phase === 'playing' && room.game.current.id === userId) {
       // 掉线者正处于回合 → 托管
       this.clearTimer(room, 'turnTimer');
@@ -247,7 +289,8 @@ export class RoomService {
 
   playCard(code: string, userId: string, cardId: string, chosenColor?: string, targetPlayerId?: string) {
     const room = this.requireGame(code);
-    const events = room.game!.playCard(userId, cardId, chosenColor as never, targetPlayerId);
+    const color = this.parseColor(chosenColor);
+    const events = room.game!.playCard(userId, cardId, color, targetPlayerId);
     this.broadcastGameState(room, events);
     this.afterTurn(room);
   }
@@ -304,46 +347,37 @@ export class RoomService {
   }
 
   private scheduleTurn(room: Room) {
+    this.clearTimer(room, 'turnTimer');
     room.turnTimer = setTimeout(() => {
       const game = room.game;
       if (!game || game.phase !== 'playing') return;
       const cur = game.current;
       try {
-        const events = game.forceAction(cur.id);
+        const events = game.forceAction(cur.id, 'normal');
         this.broadcastGameState(room, events);
         this.afterTurn(room);
       } catch (e) {
         this.logger.warn(`超时托管失败: ${(e as Error).message}`);
+        // 兜底推进，避免回合卡死
+        try {
+          this.afterTurn(room);
+        } catch {
+          /* ignore */
+        }
       }
     }, TURN_TIMEOUT_MS);
   }
 
   private scheduleAi(room: Room) {
+    this.clearTimer(room, 'aiTimer');
     const delay = AI_DELAY_MIN + Math.random() * (AI_DELAY_MAX - AI_DELAY_MIN);
     room.aiTimer = setTimeout(() => {
       const game = room.game;
       if (!game || game.phase !== 'playing') return;
       const cur = game.current;
-      const roomPlayer = room.players.find((p) => p.userId === cur.id);
-      const level = room.mode === 'solo' && roomPlayer?.name.includes('新手') ? 'easy' : 'normal';
       try {
-        const action = aiChoose(game, cur.id, level as 'easy' | 'normal');
-        let events: ReturnType<UnoGame['drawCard']> = [];
-        if (action.kind === 'play') {
-          events = game.playCard(cur.id, action.cardId, action.chosenColor, action.targetPlayerId);
-        } else if (action.kind === 'draw') {
-          events = game.drawCard(cur.id);
-          if (game.phase === 'playing' && game.current.id === cur.id && game.drewThisTurn) {
-            const again = aiChoose(game, cur.id, level as 'easy' | 'normal');
-            if (again.kind === 'play') {
-              events = [...events, ...game.playCard(cur.id, again.cardId, again.chosenColor, again.targetPlayerId)];
-            } else if (again.kind === 'pass') {
-              events = [...events, ...game.pass(cur.id)];
-            }
-          }
-        } else {
-          events = game.pass(cur.id);
-        }
+        // 复用引擎的 forceAction（摸牌后继续决策等逻辑统一在引擎内），避免双份实现漂移
+        let events: GameEvent[] = game.forceAction(cur.id, room.difficulty);
         // AI 剩 1 张时大概率自动喊 UNO（少数情况漏喊，可被玩家抓）
         const aiPlayer = game.players.find((p) => p.id === cur.id);
         if (game.phase === 'playing' && aiPlayer && aiPlayer.hand.length === 1 && !aiPlayer.calledUno) {
@@ -353,9 +387,8 @@ export class RoomService {
         this.afterTurn(room);
       } catch (e) {
         this.logger.warn(`AI 执行失败: ${(e as Error).message}`);
+        // 兜底推进回合，避免对局卡死
         try {
-          const events = game.forceAction(cur.id);
-          this.broadcastGameState(room, events);
           this.afterTurn(room);
         } catch {
           /* ignore */
@@ -371,6 +404,16 @@ export class RoomService {
     }
   }
 
+  private destroyRoom(room: Room) {
+    this.clearTimer(room, 'turnTimer');
+    this.clearTimer(room, 'aiTimer');
+    this.clearTimer(room, 'cleanupTimer');
+    const humanUserIds = room.players.filter((p) => !p.isAi).map((p) => p.userId);
+    this.rooms.delete(room.code);
+    this.logger.log(`房间 ${room.code} 已回收`);
+    for (const uid of humanUserIds) this.gcUser(uid);
+  }
+
   // ---------- 广播 ----------
 
   private emitToRoom(room: Room, event: string, payload: unknown) {
@@ -383,28 +426,32 @@ export class RoomService {
     this.emitToRoom(room, 'room:state', this.roomState(room));
   }
 
-  broadcastGameState(room: Room, events: unknown[]) {
+  broadcastGameState(room: Room, events: GameEvent[]) {
     if (!this.server) return;
     // UNO 宣言 → 全房间广播特效事件（所有玩家屏幕播放 UNO 爆炸）
-    for (const ev of events as { type?: string; playerId?: string }[]) {
-      if (ev?.type === 'unoCalled' && ev.playerId) {
+    for (const ev of events) {
+      if (ev.type === 'unoCalled') {
         const p = room.players.find((x) => x.userId === ev.playerId);
         this.emitToRoom(room, 'game:uno', { userId: ev.playerId, name: p?.name || '' });
       }
     }
     for (const player of room.players) {
       if (player.isAi || !player.socketId) continue;
+      const view = this.viewFor(room, player.userId);
+      if (!view) continue;
       const socket = this.server.sockets.sockets.get(player.socketId);
       if (!socket) continue;
-      socket.emit('game:state', { events, state: this.viewFor(room, player.userId) });
+      socket.emit('game:state', { events, state: view });
     }
   }
 
   sendGameStateTo(room: Room, socketId: string, userId: string) {
     if (!this.server) return;
+    const view = this.viewFor(room, userId);
+    if (!view) return;
     const socket = this.server.sockets.sockets.get(socketId);
     if (!socket) return;
-    socket.emit('game:state', { events: [], state: this.viewFor(room, userId) });
+    socket.emit('game:state', { events: [], state: view });
   }
 
   roomState(room: Room) {
@@ -414,6 +461,7 @@ export class RoomService {
       hostId: room.hostId,
       maxPlayers: room.maxPlayers,
       rules: room.rules,
+      difficulty: room.difficulty,
       started: room.started,
       players: room.players.map((p) => ({
         userId: p.userId,
@@ -425,11 +473,9 @@ export class RoomService {
     };
   }
 
-  viewFor(room: Room, userId: string): GameView {
+  viewFor(room: Room, userId: string): GameView | null {
     const game = room.game;
-    if (!game) {
-      return null as never;
-    }
+    if (!game) return null;
     const me = game.players.find((p) => p.id === userId);
     const isYourTurn = game.current.id === userId;
     return {

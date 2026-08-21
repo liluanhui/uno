@@ -1,6 +1,6 @@
-import { Card, CardColor, GameEvent, GamePhase, HouseRules, PlayerMeta, PlayerState } from './types';
+import { Card, GameError, GameEvent, GamePhase, HouseRules, PlayerMeta, PlayerState, RealColor } from './types';
 import { cardPoints, createDeck, shuffle } from './deck';
-import { aiChoose } from './ai';
+import { aiChoose, AiLevel } from './ai';
 
 export const DEFAULT_RULES: HouseRules = {
   stackDraw: true,
@@ -9,18 +9,14 @@ export const DEFAULT_RULES: HouseRules = {
   lastCardNoAction: false,
 };
 
-export class GameError extends Error {
-  constructor(public code: string, message: string) {
-    super(message);
-  }
-}
+const VALID_COLORS: RealColor[] = ['red', 'yellow', 'green', 'blue'];
 
 export class UnoGame {
   phase: GamePhase = 'playing';
   players: PlayerState[];
   drawPile: Card[] = [];
   discardPile: Card[] = [];
-  activeColor: CardColor = 'wild';
+  activeColor!: RealColor;
   direction: 1 | -1 = 1;
   currentIdx = 0;
   pendingDraw = 0;
@@ -55,7 +51,8 @@ export class UnoGame {
     deck.push(...wilds);
     this.drawPile = deck;
     this.discardPile.push(first);
-    this.activeColor = first.color;
+    // while 循环已保证 first 非万能牌
+    this.activeColor = first.color as RealColor;
   }
 
   get current(): PlayerState {
@@ -92,16 +89,16 @@ export class UnoGame {
   }
 
   /** 出牌；万能牌需带 chosenColor，房规七换零需带 targetPlayerId */
-  playCard(playerId: string, cardId: string, chosenColor?: CardColor, targetPlayerId?: string): GameEvent[] {
+  playCard(playerId: string, cardId: string, chosenColor?: RealColor, targetPlayerId?: string): GameEvent[] {
     this.assertPlaying();
     if (this.current.id !== playerId) throw new GameError('not_your_turn', '还没轮到你');
     const player = this.find(playerId);
-    const card = player.hand.find((c) => c.id === cardId);
-    if (!card) throw new GameError('card_not_in_hand', '手牌里没有这张牌');
+    const ci = player.hand.findIndex((c) => c.id === cardId);
+    if (ci < 0) throw new GameError('card_not_in_hand', '手牌里没有这张牌');
+    const card = player.hand[ci];
     if (!this.canPlay(card)) throw new GameError('illegal_card', '这张牌现在不能出');
-    if ((card.kind === 'wild' || card.kind === 'wild4') && !chosenColor) {
-      throw new GameError('color_required', '请选择颜色');
-    }
+    // 万能牌必须选合法颜色：校验通过后 chosenColor 在本函数内视为已确定
+    const chosen = card.color === 'wild' ? this.resolveWildColor(chosenColor) : null;
     if (this.rules.lastCardNoAction && player.hand.length === 1 && card.kind !== 'number') {
       throw new GameError('last_card_action', '按房规，最后一张不能是功能牌');
     }
@@ -114,13 +111,14 @@ export class UnoGame {
     }
 
     const events: GameEvent[] = [];
-    player.hand = player.hand.filter((c) => c.id !== cardId);
+    player.hand.splice(ci, 1);
     this.discardPile.push(card);
     events.push({ type: 'cardPlayed', playerId, card });
 
     if (card.color === 'wild') {
-      this.activeColor = chosenColor!;
-      events.push({ type: 'colorChosen', color: chosenColor! });
+      // chosen 已由 resolveWildColor 校验为合法颜色
+      this.activeColor = chosen!;
+      events.push({ type: 'colorChosen', color: chosen! });
     } else {
       this.activeColor = card.color;
     }
@@ -138,8 +136,10 @@ export class UnoGame {
         const tmp = player.hand;
         player.hand = target.hand;
         target.hand = tmp;
+        // 被动获得手牌的玩家无需喊 UNO（不是自己出到 1 张）
         for (const p of [player, target]) {
-          if (p.hand.length > 1) p.calledUno = false;
+          if (p.hand.length === 1) p.calledUno = true;
+          else if (p.hand.length > 1) p.calledUno = false;
         }
         events.push({ type: 'handSwapped', aId: player.id, bId: target.id });
       } else if (card.kind === 'number' && card.value === 0 && this.players.length > 1) {
@@ -153,7 +153,8 @@ export class UnoGame {
         }
         this.players.forEach((p, i) => {
           p.hand = hands[i];
-          if (p.hand.length > 1) p.calledUno = false;
+          if (p.hand.length === 1) p.calledUno = true;
+          else if (p.hand.length > 1) p.calledUno = false;
         });
         events.push({ type: 'handsRotated' });
       }
@@ -206,19 +207,26 @@ export class UnoGame {
     if (this.pendingDraw > 0) {
       const n = this.pendingDraw;
       this.pendingDraw = 0;
-      this.giveCards(player, n, events);
+      const drawn = this.giveCards(player, n);
+      if (drawn > 0) events.push({ type: 'cardDrawn', playerId: player.id, count: drawn });
       this.advance(1, events);
       return events;
     }
     if (this.drewThisTurn) throw new GameError('already_drew', '本回合已摸过牌');
     if (this.rules.drawUntilPlayable) {
+      // 摸到能出为止；聚合成单个 cardDrawn 事件，count 与真实摸牌数一致
       let guard = 0;
+      let drawn = 0;
       do {
-        this.giveCards(player, 1, events);
+        const d = this.giveCards(player, 1);
+        if (d === 0) break; // 牌堆耗尽，无法继续摸
+        drawn += d;
         guard++;
       } while (guard < 30 && !player.hand.some((c) => this.canPlay(c)));
+      if (drawn > 0) events.push({ type: 'cardDrawn', playerId: player.id, count: drawn });
     } else {
-      this.giveCards(player, 1, events);
+      const drawn = this.giveCards(player, 1);
+      if (drawn > 0) events.push({ type: 'cardDrawn', playerId: player.id, count: drawn });
     }
     this.drewThisTurn = true;
     return events;
@@ -252,25 +260,22 @@ export class UnoGame {
       throw new GameError('bad_catch', '对方已喊 UNO 或手牌数不对');
     }
     const events: GameEvent[] = [{ type: 'unoCaught', catcherId, targetId }];
-    this.giveCards(target, 2, events);
+    const drawn = this.giveCards(target, 2);
+    if (drawn > 0) events.push({ type: 'cardDrawn', playerId: target.id, count: drawn });
     return events;
   }
 
   /** 超时托管 / 断线托管：自动执行当前玩家回合 */
-  forceAction(playerId: string, rng: () => number = Math.random): GameEvent[] {
+  forceAction(playerId: string, level: AiLevel = 'normal', rng: () => number = Math.random): GameEvent[] {
     this.assertPlaying();
-    const action = aiChoose(this, playerId, 'normal', rng);
+    const action = aiChoose(this, playerId, level, rng);
     if (action.kind === 'play') {
       return this.playCard(playerId, action.cardId, action.chosenColor, action.targetPlayerId);
     }
     if (action.kind === 'draw') {
       const ev = this.drawCard(playerId);
-      if (
-        this.phase === 'playing' &&
-        this.current.id === playerId &&
-        this.drewThisTurn
-      ) {
-        const again = aiChoose(this, playerId, 'normal', rng);
+      if (this.phase === 'playing' && this.current.id === playerId && this.drewThisTurn) {
+        const again = aiChoose(this, playerId, level, rng);
         if (again.kind === 'play') {
           return [...ev, ...this.playCard(playerId, again.cardId, again.chosenColor, again.targetPlayerId)];
         }
@@ -281,20 +286,37 @@ export class UnoGame {
     return this.pass(playerId);
   }
 
+  /** 校验万能牌选色并返回合法颜色（非法则抛错） */
+  private resolveWildColor(chosenColor: RealColor | undefined): RealColor {
+    if (!chosenColor) throw new GameError('color_required', '请选择颜色');
+    if (!VALID_COLORS.includes(chosenColor)) throw new GameError('bad_color', '颜色非法');
+    return chosenColor;
+  }
+
   private playerAt(steps: number): PlayerState {
+    return this.players[this.idxAt(steps)];
+  }
+
+  private idxAt(steps: number): number {
     const n = this.players.length;
-    const idx = ((this.currentIdx + this.direction * steps) % n + n) % n;
-    return this.players[idx];
+    return ((this.currentIdx + this.direction * steps) % n + n) % n;
   }
 
   private advance(steps: number, events: GameEvent[]) {
-    this.currentIdx = this.players.indexOf(this.playerAt(steps));
+    this.currentIdx = this.idxAt(steps);
     this.drewThisTurn = false;
     this.turn++;
+    // 牌堆彻底耗尽且无人可出 → 平局，避免对局死锁
+    if (this.isDeadlocked()) {
+      this.settleDraw(events);
+      return;
+    }
     events.push({ type: 'turn', playerId: this.current.id });
   }
 
-  private giveCards(player: PlayerState, n: number, events: GameEvent[]) {
+  /** 实际发牌，返回真实摸牌数（牌堆耗尽时可能 < n） */
+  private giveCards(player: PlayerState, n: number): number {
+    let drawn = 0;
     for (let i = 0; i < n; i++) {
       if (this.drawPile.length === 0) {
         if (this.discardPile.length <= 1) break;
@@ -302,11 +324,18 @@ export class UnoGame {
         this.drawPile = shuffle(this.discardPile);
         this.discardPile = [top];
       }
-      const card = this.drawPile.pop()!;
+      const card = this.drawPile.pop();
+      if (!card) break;
       player.hand.push(card);
+      drawn++;
     }
     if (player.hand.length > 1) player.calledUno = false;
-    events.push({ type: 'cardDrawn', playerId: player.id, count: n });
+    return drawn;
+  }
+
+  private isDeadlocked(): boolean {
+    if (this.drawPile.length > 0 || this.discardPile.length > 1) return false;
+    return this.players.every((p) => !p.hand.some((c) => this.canPlay(c)));
   }
 
   private settle(winnerId: string, events: GameEvent[]) {
@@ -315,17 +344,26 @@ export class UnoGame {
     const gain = this.players
       .filter((p) => p.id !== winnerId)
       .reduce((s, p) => s + p.hand.reduce((a, c) => a + cardPoints(c), 0), 0);
-    this.scores = { [winnerId]: gain };
+    const scores: Record<string, number> = {};
+    this.players.forEach((p) => {
+      scores[p.id] = p.id === winnerId ? gain : 0;
+    });
+    this.scores = scores;
     events.push({ type: 'settled', winnerId, scores: this.scores });
+  }
+
+  private settleDraw(events: GameEvent[]) {
+    this.phase = 'settled';
+    this.winnerId = null;
+    const scores: Record<string, number> = {};
+    this.players.forEach((p) => {
+      scores[p.id] = 0;
+    });
+    this.scores = scores;
+    events.push({ type: 'settled', winnerId: null, scores: this.scores });
   }
 
   private assertPlaying() {
     if (this.phase !== 'playing') throw new GameError('game_over', '本局已结束');
   }
-}
-
-/** 从快照恢复对局（断线重连用） */
-export function reviveGame(data: Record<string, unknown>): UnoGame {
-  const game = Object.create(UnoGame.prototype) as UnoGame;
-  return Object.assign(game, data) as UnoGame;
 }

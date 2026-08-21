@@ -1,10 +1,11 @@
 import type { UnoGame } from './engine';
-import type { Card, CardColor, PlayerState } from './types';
+import type { Card, PlayerState, RealColor } from './types';
+import { GameError } from './types';
 
 export type AiLevel = 'easy' | 'normal';
 
 export type AiAction =
-  | { kind: 'play'; cardId: string; chosenColor?: CardColor; targetPlayerId?: string }
+  | { kind: 'play'; cardId: string; chosenColor?: RealColor; targetPlayerId?: string }
   | { kind: 'draw' }
   | { kind: 'pass' };
 
@@ -16,7 +17,7 @@ export function aiChoose(
   rng: () => number = Math.random,
 ): AiAction {
   const player = game.players.find((p) => p.id === playerId);
-  if (!player) return { kind: 'pass' };
+  if (!player) throw new GameError('player_not_found', '玩家不存在');
   const playable = player.hand.filter((c) => game.canPlay(c));
 
   if (game.pendingDraw > 0) {
@@ -53,13 +54,15 @@ function playDecision(
 }
 
 function pickBest(game: UnoGame, player: PlayerState, playable: Card[]): Card {
-  // 对手只剩 1 张时优先攻击
+  // 对手只剩 1 张时优先攻击（双人局 reverse 等同 skip，也算攻击牌）
   const threat = game.players.some((p) => p.id !== player.id && p.hand.length === 1);
   if (threat) {
+    const twoPlayer = game.players.length === 2;
     const attack =
       playable.find((c) => c.kind === 'wild4') ||
       playable.find((c) => c.kind === 'draw2') ||
-      playable.find((c) => c.kind === 'skip');
+      playable.find((c) => c.kind === 'skip') ||
+      (twoPlayer ? playable.find((c) => c.kind === 'reverse') : undefined);
     if (attack) return attack;
   }
   // 优先出数字牌，其次普通功能牌，万能牌留后手；同组内出手牌最多的颜色
@@ -72,19 +75,19 @@ function pickBest(game: UnoGame, player: PlayerState, playable: Card[]): Card {
   for (const c of player.hand) {
     if (c.color !== 'wild') count[c.color] = (count[c.color] || 0) + 1;
   }
-  return [...pool].sort((a, b) => (count[b.color] || 0) - (count[a.color] || 0))[0];
+  return pool.reduce((best, c) => ((count[c.color] || 0) > (count[best.color] || 0) ? c : best), pool[0]);
 }
 
-function dominantColor(hand: Card[], rng: () => number): CardColor {
+function dominantColor(hand: Card[], rng: () => number): RealColor {
   const count: Record<string, number> = {};
   for (const c of hand) {
     if (c.color !== 'wild') count[c.color] = (count[c.color] || 0) + 1;
   }
   const entries = Object.entries(count);
   if (entries.length === 0) {
-    const colors: CardColor[] = ['red', 'yellow', 'green', 'blue'];
+    const colors: RealColor[] = ['red', 'yellow', 'green', 'blue'];
     return colors[Math.floor(rng() * 4)];
   }
   entries.sort((a, b) => b[1] - a[1]);
-  return entries[0][0] as CardColor;
+  return entries[0][0] as RealColor;
 }

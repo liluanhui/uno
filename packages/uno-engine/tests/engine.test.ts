@@ -70,7 +70,7 @@ describe('出牌合法性', () => {
     // 同数字跨色
     const g3 = newGame();
     const me3 = g3.current;
-    const sameValue = { id: 't3', color: wrongColor, kind: 'number' as const, value: g3.top.value ?? 5 };
+    const sameValue = { id: 't3', color: wrongColor, kind: 'number' as const, value: g3.top.kind === 'number' ? g3.top.value : 5 };
     me3.hand.push(sameValue);
     if (g3.top.kind === 'number' && sameValue.value === g3.top.value) {
       expect(g3.canPlay(sameValue)).toBe(true);
@@ -86,6 +86,15 @@ describe('出牌合法性', () => {
     const ev = g.playCard(me.id, wild.id, 'blue');
     expect(g.activeColor).toBe('blue');
     expect(ev[1].type).toBe('colorChosen');
+  });
+
+  it('万能牌选色非法被拒', () => {
+    const g = newGame();
+    const me = g.current;
+    const wild = { id: 'wbad', color: 'wild' as const, kind: 'wild' as const };
+    me.hand.push(wild);
+    expect(() => g.playCard(me.id, wild.id, 'purple' as never)).toThrow(/颜色非法/);
+    expect(() => g.playCard(me.id, wild.id, undefined as never)).toThrow(/颜色/);
   });
 });
 
@@ -141,7 +150,7 @@ describe('功能牌', () => {
     me.hand.push(d2a);
     g.playCard(me.id, d2a.id);
     const victim = g.current;
-    const d2b = { id: 'd3', color: victim.hand[0]?.color === g.activeColor ? g.activeColor : g.activeColor, kind: 'draw2' as const };
+    const d2b = { id: 'd3', color: g.activeColor, kind: 'draw2' as const };
     victim.hand.push(d2b);
     g.playCard(victim.id, d2b.id);
     expect(g.pendingDraw).toBe(4);
@@ -180,6 +189,15 @@ describe('摸牌与过牌', () => {
     const ev = g.drawCard(me.id);
     expect(me.hand.some((c) => g.canPlay(c))).toBe(true);
     expect(ev.filter((e) => e.type === 'cardDrawn').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('drawUntilPlayable 摸牌事件 count 与真实摸牌数一致', () => {
+    const g = newGame({ ...DEFAULT_RULES, drawUntilPlayable: true });
+    const me = g.current;
+    const before = me.hand.length;
+    const ev = g.drawCard(me.id);
+    const total = ev.reduce((s, e) => (e.type === 'cardDrawn' ? s + e.count : s), 0);
+    expect(me.hand.length - before).toBe(total);
   });
 });
 
@@ -232,13 +250,15 @@ describe('胜利与计分', () => {
     const me = g.current;
     const last = g.playableCards(me.id)[0];
     me.hand = [last];
-    const ev = g.playCard(me.id, last.id);
+    const ev = g.playCard(me.id, last.id, last.color === 'wild' ? 'red' : undefined);
     expect(g.phase).toBe('settled');
     expect(g.winnerId).toBe(me.id);
     const expected = g.players
       .filter((p) => p.id !== me.id)
       .reduce((s, p) => s + p.hand.reduce((a, c) => a + cardPoints(c), 0), 0);
     expect(g.scores[me.id]).toBe(expected);
+    // 败者也有计分条目（0 分）
+    for (const p of g.players) expect(g.scores[p.id]).toBeDefined();
     expect(ev.at(-1)!.type).toBe('settled');
   });
 
@@ -283,6 +303,37 @@ describe('七换零房规', () => {
       expect(p.hand.map((c) => c.id).sort()).toEqual([...afterPlay[sourceIdx]].sort());
     });
   });
+
+  it('7 换后被动获得 1 张不被误抓 UNO', () => {
+    const g = newGame({ ...DEFAULT_RULES, sevenZero: true });
+    const me = g.current;
+    const seven = { id: 'n7a', color: g.activeColor, kind: 'number' as const, value: 7 };
+    me.hand.push(seven);
+    const target = g.players.find((p) => p.id !== me.id)!;
+    target.hand = [target.hand[0]]; // target 只剩 1 张
+    g.playCard(me.id, seven.id, undefined, target.id);
+    expect(me.hand.length).toBe(1);
+    expect(me.calledUno).toBe(true); // 被动获得，无需喊
+    const catcher = g.players.find((p) => p.id !== me.id)!.id;
+    expect(() => g.catchUno(catcher, me.id)).toThrow(/已喊 UNO 或手牌数不对/);
+  });
+
+  it('0 平移后被动获得 1 张不被误抓 UNO', () => {
+    const g = newGame({ ...DEFAULT_RULES, sevenZero: true });
+    const me = g.current;
+    const zero = { id: 'n0a', color: g.activeColor, kind: 'number' as const, value: 0 };
+    me.hand.push(zero);
+    const victim = g.players.find((p) => p.id !== me.id)!;
+    victim.hand = [victim.hand[0]]; // 制造一张 1 张手牌
+    g.playCard(me.id, zero.id);
+    for (const p of g.players) {
+      if (p.hand.length === 1) {
+        expect(p.calledUno).toBe(true);
+        const catcher = g.players.find((x) => x.id !== p.id)!.id;
+        expect(() => g.catchUno(catcher, p.id)).toThrow(/已喊 UNO 或手牌数不对/);
+      }
+    }
+  });
 });
 
 describe('AI 与托管', () => {
@@ -309,7 +360,7 @@ describe('AI 与托管', () => {
       }
       if (g.phase === 'settled') break;
     }
-    expect([g.phase]).toContain(g.phase);
+    expect(['playing', 'settled']).toContain(g.phase);
   });
 
   it('forceAction 托管能推进对局直到结束', () => {
@@ -323,10 +374,29 @@ describe('AI 与托管', () => {
     expect(g.winnerId).toBeTruthy();
   });
 
+  it('forceAction 支持简单难度并推进对局', () => {
+    const g = newGame();
+    let guard = 0;
+    while (g.phase === 'playing' && guard < 500) {
+      g.forceAction(g.current.id, 'easy');
+      guard++;
+    }
+    expect(g.phase).toBe('settled');
+  });
+
+  it('aiChoose 对不存在玩家抛错', () => {
+    const g = newGame();
+    expect(() => aiChoose(g, 'no-such-player', 'normal')).toThrow(GameError);
+  });
+
   it('快照可恢复', () => {
     const g = newGame();
-    const card = firstPlayable(g);
-    if (card) g.playCard(g.current.id, card);
+    const cardId = firstPlayable(g);
+    if (cardId) {
+      const me = g.current;
+      const cardObj = me.hand.find((c) => c.id === cardId);
+      g.playCard(g.current.id, cardId, cardObj?.color === 'wild' ? 'red' : undefined);
+    }
     const snap = JSON.parse(JSON.stringify(g));
     const g2 = Object.assign(Object.create(Object.getPrototypeOf(g)), snap) as UnoGame;
     expect(g2.current.id).toBe(g.current.id);
