@@ -2,6 +2,7 @@
 import { onMounted, watch, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useUno } from './store';
+import { muted as soundMuted, toggleMute } from './sfx';
 
 const store = useUno();
 const router = useRouter();
@@ -40,7 +41,17 @@ watch(
       </span>
       UNO
     </div>
-    <button class="ghost theme-btn" @click="toggleTheme">{{ theme === 'light' ? '夜间' : '日间' }}</button>
+    <div class="header-actions">
+      <button
+        class="ghost icon-btn"
+        @click="toggleMute"
+        :aria-label="soundMuted ? '开启音效' : '关闭音效'"
+        :title="soundMuted ? '开启音效' : '关闭音效'"
+      >
+        {{ soundMuted ? '🔇' : '🔊' }}
+      </button>
+      <button class="ghost theme-btn" @click="toggleTheme">{{ theme === 'light' ? '夜间' : '日间' }}</button>
+    </div>
   </header>
 
   <router-view />

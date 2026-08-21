@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { io, type Socket } from 'socket.io-client';
+import * as sfx from './sfx';
 
 export interface CardT {
   id: string;
@@ -20,6 +21,7 @@ export interface RoomStateT {
 
 export interface GameViewT {
   phase: 'playing' | 'settled';
+  paused: boolean;
   activeColor: string;
   direction: 1 | -1;
   pendingDraw: number;
@@ -98,17 +100,21 @@ export const useUno = defineStore('uno', {
         this.lastEvents = payload.events || [];
         this.pendingWildCard = null;
         this.pendingSwapCard = null;
+        sfx.playEvents(payload.events || [], this.userId);
       });
       // 开局：洗牌发牌动效（约 2.8s 后亮出牌桌）
       socket.on('game:dealing', () => {
         this.dealing = true;
+        sfx.deal();
         setTimeout(() => (this.dealing = false), 2800);
       });
       // 有人喊 UNO：全屏爆炸特效
       socket.on('game:uno', (data: { userId: string; name: string }) => {
         this.unoFx = { id: ++fxSeq, userId: data.userId, name: data.name || '有人' };
+        sfx.uno();
       });
-      socket.on('error', (e: { code: string; message: string }) => {
+      socket.on('app:error', (e: { code: string; message: string }) => {
+        sfx.error();
         this.toast(e.message || '出错了');
         // 续局失败（房间已回收等）：清除本地房间号，避免每次重连都失败
         if (this.resuming || !this.room) {
@@ -173,6 +179,12 @@ export const useUno = defineStore('uno', {
     },
     catchUno(targetId: string) {
       socket?.emit('game:catchUno', { targetId });
+    },
+    pause() {
+      socket?.emit('game:pause');
+    },
+    resume() {
+      socket?.emit('game:resume');
     },
   },
 });

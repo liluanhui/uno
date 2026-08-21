@@ -171,6 +171,23 @@ input:focus {
   border-radius: 10px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 18px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* ---------- 对局布局 ---------- */
 .play-wrap {
   flex: 1;
@@ -621,6 +638,58 @@ input:focus {
   flex-wrap: wrap;
 }
 
+/* ---------- 游戏菜单 / 暂停 ---------- */
+.menu-btn {
+  margin-left: auto;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 16px;
+  border-radius: 10px;
+  line-height: 1;
+}
+
+.pause-dialog {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.pause-icon {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.pause-room {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pause-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.pause-actions button {
+  width: 100%;
+}
+
+.mini {
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 10px;
+}
+
+.close-menu {
+  margin-top: 4px;
+  color: var(--text-muted);
+}
+
 /* ---------- toast ---------- */
 .toast-wrap {
   position: fixed;
@@ -840,18 +909,24 @@ input:focus {
 }
 
 .panel-box {
-  animation: panelIn 0.3s cubic-bezier(0.2, 1, 0.3, 1.1);
+  transform-origin: top center;
 }
 
 .panel-enter-active,
 .panel-leave-active {
-  transition: all 0.28s cubic-bezier(0.2, 1, 0.3, 1.1);
+  transition: opacity 0.26s cubic-bezier(0.2, 1, 0.3, 1.1),
+    transform 0.26s cubic-bezier(0.2, 1, 0.3, 1.1);
 }
 
-.panel-enter-from,
+/* 进入：自下方上浮；离开：向上收起，方向连贯，避免突兀 */
+.panel-enter-from {
+  opacity: 0;
+  transform: translateY(12px) scale(0.985);
+}
+
 .panel-leave-to {
   opacity: 0;
-  transform: translateY(-10px) scale(0.98);
+  transform: translateY(-12px) scale(0.985);
 }
 
 .nick-panel {
@@ -1043,11 +1118,6 @@ input:focus {
 @keyframes dialogPop {
   0% { transform: scale(0.85); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
-}
-
-@keyframes panelIn {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes heroFloat {

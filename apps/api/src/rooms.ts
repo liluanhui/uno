@@ -4,7 +4,6 @@ import { randomBytes, randomUUID } from 'crypto';
 import { DEFAULT_RULES, GameError, HouseRules, RealColor, UnoGame } from '@uno/engine';
 import type { GameEvent } from '@uno/engine';
 
-const TURN_TIMEOUT_MS = 30_000;
 const AI_DELAY_MIN = 700;
 const AI_DELAY_MAX = 1400;
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -36,7 +35,7 @@ export interface Room {
   players: RoomPlayer[];
   game: UnoGame | null;
   started: boolean;
-  turnTimer: NodeJS.Timeout | null;
+  paused: boolean;
   aiTimer: NodeJS.Timeout | null;
   cleanupTimer: NodeJS.Timeout | null;
   createdAt: number;
@@ -44,6 +43,7 @@ export interface Room {
 
 export interface GameView {
   phase: 'playing' | 'settled';
+  paused: boolean;
   activeColor: string;
   direction: 1 | -1;
   pendingDraw: number;
@@ -171,7 +171,7 @@ export class RoomService {
       ],
       game: null,
       started: false,
-      turnTimer: null,
+      paused: false,
       aiTimer: null,
       cleanupTimer: null,
       createdAt: Date.now(),
@@ -193,15 +193,11 @@ export class RoomService {
     if (!room) throw new GameError('room_not_found', '房间不存在');
     let player = room.players.find((p) => p.userId === user.id);
     if (player) {
-      // 重连：先清理可能残留的托管定时器，避免孤儿 turnTimer 重复出牌
+      // 重连：清理可能残留的 AI 托管定时器，让玩家自行接管回合
       player.connected = true;
       player.socketId = socketId;
-      this.clearTimer(room, 'turnTimer');
       this.clearTimer(room, 'aiTimer');
       this.clearTimer(room, 'cleanupTimer');
-      if (room.game && room.game.phase === 'playing' && room.game.current.id === user.id) {
-        this.scheduleTurn(room);
-      }
     } else {
       if (room.started) throw new GameError('room_started', '对局已开始，无法加入');
       if (room.players.length >= room.maxPlayers) throw new GameError('room_full', '房间已满');
@@ -232,9 +228,8 @@ export class RoomService {
       // 无人在线，稍后回收房间
       this.clearTimer(room, 'cleanupTimer');
       room.cleanupTimer = setTimeout(() => this.destroyRoom(room), ROOM_TTL_MS);
-    } else if (room.started && room.game?.phase === 'playing' && room.game.current.id === userId) {
-      // 掉线者正处于回合 → 托管
-      this.clearTimer(room, 'turnTimer');
+    } else if (!room.paused && room.started && room.game?.phase === 'playing' && room.game.current.id === userId) {
+      // 掉线者正处于回合 → AI 托管，避免对局卡死
       this.scheduleAi(room);
     }
   }
@@ -255,9 +250,33 @@ export class RoomService {
     if (!room) throw new GameError('room_not_found', '房间不存在');
     if (userId !== room.hostId) throw new GameError('not_host', '只有房主能开始新一局');
     if (!room.started) return;
-    this.clearTimer(room, 'turnTimer');
     this.clearTimer(room, 'aiTimer');
     this.startGame(room);
+  }
+
+  // ---------- 暂停 / 继续 ----------
+
+  pause(code: string, userId: string) {
+    const room = this.requireGame(code);
+    if (room.paused) return;
+    if (room.game!.phase !== 'playing') throw new GameError('not_playing', '当前阶段不能暂停');
+    if (userId !== room.hostId) throw new GameError('not_host', '只有房主能暂停');
+    room.paused = true;
+    // 冻结 AI 托管，避免暂停期间继续推进
+    this.clearTimer(room, 'aiTimer');
+    this.broadcastGameState(room, []);
+    this.logger.log(`房间 ${room.code} 已暂停（by ${userId}）`);
+  }
+
+  resume(code: string, userId: string) {
+    const room = this.requireGame(code);
+    if (!room.paused) return;
+    if (userId !== room.hostId) throw new GameError('not_host', '只有房主能继续');
+    room.paused = false;
+    this.broadcastGameState(room, []);
+    // 按当前回合重新调度（人 → 回合定时器；AI/掉线 → 托管）
+    this.afterTurn(room);
+    this.logger.log(`房间 ${room.code} 已继续（by ${userId}）`);
   }
 
   private maybeStart(room: Room) {
@@ -276,6 +295,7 @@ export class RoomService {
     const metas = room.players.map((p) => ({ id: p.userId, name: p.name, isAi: p.isAi }));
     room.game = new UnoGame(metas, room.rules);
     room.started = true;
+    room.paused = false;
     for (const p of room.players) p.ready = false;
     this.logger.log(`房间 ${room.code} 开始对局，${room.players.length} 名玩家`);
     this.broadcastRoomState(room);
@@ -288,7 +308,7 @@ export class RoomService {
   // ---------- 对局操作 ----------
 
   playCard(code: string, userId: string, cardId: string, chosenColor?: string, targetPlayerId?: string) {
-    const room = this.requireGame(code);
+    const room = this.requireActiveGame(code);
     const color = this.parseColor(chosenColor);
     const events = room.game!.playCard(userId, cardId, color, targetPlayerId);
     this.broadcastGameState(room, events);
@@ -296,27 +316,27 @@ export class RoomService {
   }
 
   drawCard(code: string, userId: string) {
-    const room = this.requireGame(code);
+    const room = this.requireActiveGame(code);
     const events = room.game!.drawCard(userId);
     this.broadcastGameState(room, events);
     this.afterTurn(room);
   }
 
   pass(code: string, userId: string) {
-    const room = this.requireGame(code);
+    const room = this.requireActiveGame(code);
     const events = room.game!.pass(userId);
     this.broadcastGameState(room, events);
     this.afterTurn(room);
   }
 
   callUno(code: string, userId: string) {
-    const room = this.requireGame(code);
+    const room = this.requireActiveGame(code);
     const events = room.game!.callUno(userId);
     this.broadcastGameState(room, events);
   }
 
   catchUno(code: string, userId: string, targetId: string) {
-    const room = this.requireGame(code);
+    const room = this.requireActiveGame(code);
     const events = room.game!.catchUno(userId, targetId);
     this.broadcastGameState(room, events);
   }
@@ -327,54 +347,46 @@ export class RoomService {
     return room;
   }
 
+  /** 对局操作前置：暂停期间拒绝一切写操作 */
+  private requireActiveGame(code: string): Room {
+    const room = this.requireGame(code);
+    if (room.paused) throw new GameError('paused', '对局已暂停，等待继续');
+    return room;
+  }
+
   // ---------- 回合调度 ----------
 
   private afterTurn(room: Room) {
+    if (room.paused) return;
     const game = room.game;
     if (!game || game.phase !== 'playing') {
-      this.clearTimer(room, 'turnTimer');
       this.clearTimer(room, 'aiTimer');
       this.broadcastRoomState(room);
       return;
     }
-    this.clearTimer(room, 'turnTimer');
     this.clearTimer(room, 'aiTimer');
     const cur = game.current;
     const roomPlayer = room.players.find((p) => p.userId === cur.id);
+    // 仅 AI 玩家与掉线人类需要托管；在线人类玩家不设倒计时，由其自主出牌
     const needAi = cur.isAi || !roomPlayer || !roomPlayer.connected;
     if (needAi) this.scheduleAi(room);
-    else this.scheduleTurn(room);
-  }
-
-  private scheduleTurn(room: Room) {
-    this.clearTimer(room, 'turnTimer');
-    room.turnTimer = setTimeout(() => {
-      const game = room.game;
-      if (!game || game.phase !== 'playing') return;
-      const cur = game.current;
-      try {
-        const events = game.forceAction(cur.id, 'normal');
-        this.broadcastGameState(room, events);
-        this.afterTurn(room);
-      } catch (e) {
-        this.logger.warn(`超时托管失败: ${(e as Error).message}`);
-        // 兜底推进，避免回合卡死
-        try {
-          this.afterTurn(room);
-        } catch {
-          /* ignore */
-        }
-      }
-    }, TURN_TIMEOUT_MS);
   }
 
   private scheduleAi(room: Room) {
+    if (room.paused) return;
     this.clearTimer(room, 'aiTimer');
     const delay = AI_DELAY_MIN + Math.random() * (AI_DELAY_MAX - AI_DELAY_MIN);
     room.aiTimer = setTimeout(() => {
       const game = room.game;
       if (!game || game.phase !== 'playing') return;
       const cur = game.current;
+      // 硬防御：仅 AI 玩家与掉线人类才托管出牌；在线人类回合一律不自动出牌，
+      // 即便上游 needAi 因竞态误判，这里也能兜住，绝不替在线玩家出牌
+      const rp = room.players.find((p) => p.userId === cur.id);
+      if (!cur.isAi && rp && rp.connected) {
+        this.afterTurn(room);
+        return;
+      }
       try {
         // 复用引擎的 forceAction（摸牌后继续决策等逻辑统一在引擎内），避免双份实现漂移
         let events: GameEvent[] = game.forceAction(cur.id, room.difficulty);
@@ -397,7 +409,7 @@ export class RoomService {
     }, delay);
   }
 
-  private clearTimer(room: Room, key: 'turnTimer' | 'aiTimer' | 'cleanupTimer') {
+  private clearTimer(room: Room, key: 'aiTimer' | 'cleanupTimer') {
     if (room[key]) {
       clearTimeout(room[key]!);
       room[key] = null;
@@ -405,7 +417,6 @@ export class RoomService {
   }
 
   private destroyRoom(room: Room) {
-    this.clearTimer(room, 'turnTimer');
     this.clearTimer(room, 'aiTimer');
     this.clearTimer(room, 'cleanupTimer');
     const humanUserIds = room.players.filter((p) => !p.isAi).map((p) => p.userId);
@@ -480,6 +491,7 @@ export class RoomService {
     const isYourTurn = game.current.id === userId;
     return {
       phase: game.phase,
+      paused: room.paused,
       activeColor: game.activeColor,
       direction: game.direction,
       pendingDraw: game.pendingDraw,

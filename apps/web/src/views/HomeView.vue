@@ -12,17 +12,19 @@ watch(nameInput, (v) => {
   if (v.trim() && v !== store.name) store.setName(v.trim());
 });
 
+type RuleKey = 'stackDraw' | 'sevenZero' | 'drawUntilPlayable' | 'lastCardNoAction';
+
 const difficulty = ref<'easy' | 'normal'>('normal');
 const maxPlayers = ref(2);
 const joinCode = ref('');
-const rules = ref({
+const rules = ref<Record<RuleKey, boolean>>({
   stackDraw: true,
   sevenZero: false,
   drawUntilPlayable: false,
   lastCardNoAction: false,
 });
 
-const ruleLabels: Record<string, string> = {
+const ruleLabels: Record<RuleKey, string> = {
   stackDraw: '叠 +2 / +4（可顺延惩罚）',
   sevenZero: '七换零（7 换手牌、0 平移）',
   drawUntilPlayable: '摸牌摸到能出为止',
@@ -100,8 +102,8 @@ function joinRoom() {
       </div>
     </div>
 
-    <!-- 入口展开面板 -->
-    <Transition name="panel">
+    <!-- 入口展开面板：out-in 串行，避免新旧面板同时在流中导致高度跳变 -->
+    <Transition name="panel" mode="out-in">
       <div v-if="activePanel === 'solo'" class="card-panel panel-box">
         <div class="section-title">难度</div>
         <div class="seg" style="margin-bottom: 12px">

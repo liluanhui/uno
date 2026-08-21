@@ -198,4 +198,20 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     if (!info.roomCode) throw new GameError('not_in_room', '你不在房间里');
     this.rooms.catchUno(info.roomCode, user.id, payload.targetId);
   }
+
+  @SubscribeMessage('game:pause')
+  onPause(client: Socket) {
+    const { user, info } = this.user(client);
+    this.rateLimit(info);
+    if (!info.roomCode) throw new GameError('not_in_room', '你不在房间里');
+    this.rooms.pause(info.roomCode, user.id);
+  }
+
+  @SubscribeMessage('game:resume')
+  onResume(client: Socket) {
+    const { user, info } = this.user(client);
+    this.rateLimit(info);
+    if (!info.roomCode) throw new GameError('not_in_room', '你不在房间里');
+    this.rooms.resume(info.roomCode, user.id);
+  }
 }

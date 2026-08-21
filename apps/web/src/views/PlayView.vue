@@ -19,7 +19,6 @@ const game = computed(() => store.game);
 const myId = computed(() => store.userId);
 
 const isHost = computed(() => room.value?.hostId === myId.value);
-const me = computed(() => game.value?.players.find((p) => p.id === myId.value) || null);
 const opponents = computed(() => game.value?.players.filter((p) => p.id !== myId.value) || []);
 const myHand = computed(() => game.value?.you?.hand || []);
 const playableIds = computed(() => new Set(game.value?.you?.playableIds || []));
@@ -50,6 +49,28 @@ function isCurrent(playerId: string): boolean {
 }
 
 const activeColorClass = computed(() => `ac-${game.value?.activeColor || 'wild'}`);
+
+const paused = computed(() => !!game.value?.paused);
+// 仅房主可暂停/继续（solo 模式人类即房主，天然覆盖）
+const canControlPause = computed(() => isHost.value);
+const showMenu = ref(false);
+
+watch(paused, (p) => {
+  // 暂停 → 自动弹出锁定棋盘；恢复 → 自动收起回到牌桌
+  showMenu.value = p;
+});
+
+function openMenu() {
+  showMenu.value = true;
+}
+function closeMenu() {
+  // 暂停期间不允许关闭，棋盘保持锁定
+  if (!paused.value) showMenu.value = false;
+}
+function togglePause() {
+  if (paused.value) store.resume();
+  else store.pause();
+}
 
 // 刷新续局：若 8 秒内仍拿不到房间状态（房间已回收/服务重启），自动回大厅
 onMounted(() => {
@@ -245,7 +266,7 @@ const ruleLabels: Record<string, string> = {
         <span v-for="(label, key) in ruleLabels" :key="key">
           <template v-if="room.rules[key]">{{ label }} · </template>
         </span>
-        <template v-if="!Object.keys(ruleLabels).some((k) => room.rules[k])">官方规则</template>
+        <template v-if="!Object.keys(ruleLabels).some((k) => room?.rules[k])">官方规则</template>
       </div>
       <div style="display: flex; gap: 10px">
         <button class="primary" style="flex: 1" @click="store.toggleReady(true)">准备</button>
@@ -305,6 +326,7 @@ const ruleLabels: Record<string, string> = {
         <span v-if="game.pendingDraw > 0" class="pending-badge">待罚 +{{ game.pendingDraw }}</span>
         <span v-if="game.isYourTurn && game.phase === 'playing'" class="turn-banner">轮到你了</span>
         <span v-else-if="game.phase === 'playing'" class="muted">等待 {{ currentPlayerName }} 行动…</span>
+        <button class="ghost menu-btn" aria-label="游戏菜单" title="游戏菜单" @click="openMenu">⏸</button>
       </div>
       <div class="piles">
         <!-- 摸牌堆：堆叠牌背 -->
@@ -380,6 +402,33 @@ const ruleLabels: Record<string, string> = {
             {{ p.name }}（{{ p.count }} 张）
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- 游戏菜单 / 暂停 -->
+    <div v-if="showMenu" class="overlay" @click.self="closeMenu">
+      <div class="dialog pause-dialog">
+        <div class="pause-icon">{{ paused ? '⏸' : '☰' }}</div>
+        <div style="font-weight: 800; font-size: 18px">{{ paused ? '已暂停' : '游戏菜单' }}</div>
+        <div v-if="room && room.mode === 'room'" class="pause-room">
+          <span class="muted">房间号</span>
+          <button class="ghost mini" @click="copyCode">{{ copied ? '已复制 ✓' : room.code }}</button>
+        </div>
+        <div class="pause-actions">
+          <button
+            v-if="!paused"
+            class="primary"
+            :disabled="!canControlPause"
+            :title="canControlPause ? '' : '只有房主可以暂停'"
+            @click="togglePause"
+          >
+            暂停游戏
+          </button>
+          <button v-else-if="canControlPause" class="primary" @click="togglePause">继续游戏</button>
+          <div v-else class="muted" style="align-self: center">等待房主继续…</div>
+          <button class="ghost" @click="leave">退出游戏</button>
+        </div>
+        <button v-if="!paused" class="ghost mini close-menu" @click="closeMenu">关闭</button>
       </div>
     </div>
 
