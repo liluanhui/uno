@@ -1,5 +1,5 @@
 import { Card, GameError, GameEvent, GamePhase, HouseRules, PlayerMeta, PlayerState, RealColor } from './types';
-import { cardPoints, createDeck, shuffle } from './deck';
+import { createDeck, shuffle } from './deck';
 import { aiChoose, AiLevel } from './ai';
 
 export const DEFAULT_RULES: HouseRules = {
@@ -25,7 +25,6 @@ export class UnoGame {
   drewThisTurn = false;
   turn = 0;
   winnerId: string | null = null;
-  scores: Record<string, number> = {};
 
   constructor(metas: PlayerMeta[], rules: HouseRules = DEFAULT_RULES, rng: () => number = Math.random) {
     this.rules = { ...rules };
@@ -341,26 +340,13 @@ export class UnoGame {
   private settle(winnerId: string, events: GameEvent[]) {
     this.phase = 'settled';
     this.winnerId = winnerId;
-    const gain = this.players
-      .filter((p) => p.id !== winnerId)
-      .reduce((s, p) => s + p.hand.reduce((a, c) => a + cardPoints(c), 0), 0);
-    const scores: Record<string, number> = {};
-    this.players.forEach((p) => {
-      scores[p.id] = p.id === winnerId ? gain : 0;
-    });
-    this.scores = scores;
-    events.push({ type: 'settled', winnerId, scores: this.scores });
+    events.push({ type: 'settled', winnerId });
   }
 
   private settleDraw(events: GameEvent[]) {
     this.phase = 'settled';
     this.winnerId = null;
-    const scores: Record<string, number> = {};
-    this.players.forEach((p) => {
-      scores[p.id] = 0;
-    });
-    this.scores = scores;
-    events.push({ type: 'settled', winnerId: null, scores: this.scores });
+    events.push({ type: 'settled', winnerId: null });
   }
 
   private assertPlaying() {

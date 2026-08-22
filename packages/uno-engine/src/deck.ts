@@ -47,17 +47,4 @@ export function shuffle<T>(arr: T[], rng: () => number = Math.random): T[] {
   return a;
 }
 
-/** 计分：数字牌面值，功能牌 20，万能牌 50 */
-export function cardPoints(card: Card): number {
-  switch (card.kind) {
-    case 'number':
-      return card.value;
-    case 'wild':
-    case 'wild4':
-      return 50;
-    default:
-      return 20;
-  }
-}
-
 export const COLORS_LIST = COLORS;

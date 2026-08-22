@@ -439,8 +439,10 @@ const ruleLabels: Record<string, string> = {
         <div style="font-weight: 800; font-size: 18px; margin-top: 4px">
           {{ game.winnerId === myId ? '你赢了！' : `${winnerName} 获胜` }}
         </div>
-        <div class="result-score">+{{ game.scores[game.winnerId || ''] || 0 }} 分</div>
-        <div class="muted">胜者获得对手剩余手牌总分</div>
+        <div class="result-score">
+          {{ store.stats.win }} 胜 · {{ store.stats.lose }} 负<span v-if="store.stats.draw"> · {{ store.stats.draw }} 平</span>
+        </div>
+        <div class="muted">累计战绩</div>
         <div class="result-actions">
           <template v-if="room && room.mode === 'room'">
             <button v-if="isHost" class="primary" @click="store.restart()">再来一局</button>

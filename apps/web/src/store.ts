@@ -35,13 +35,31 @@ export interface GameViewT {
   you: { id: string; hand: CardT[]; calledUno: boolean; playableIds: string[] } | null;
   players: { id: string; name: string; isAi: boolean; connected: boolean; count: number; calledUno: boolean }[];
   winnerId: string | null;
-  scores: Record<string, number>;
 }
 
 export interface UnoFx {
   id: number;
   userId: string;
   name: string;
+}
+
+export interface UnoStats {
+  win: number;
+  lose: number;
+  draw: number;
+}
+
+function loadStats(): UnoStats {
+  try {
+    const raw = localStorage.getItem('uno.stats');
+    if (raw) {
+      const s = JSON.parse(raw);
+      return { win: s.win || 0, lose: s.lose || 0, draw: s.draw || 0 };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { win: 0, lose: 0, draw: 0 };
 }
 
 let socket: Socket | null = null;
@@ -63,6 +81,7 @@ export const useUno = defineStore('uno', {
     pendingSwapCard: null as CardT | null,
     dealing: false,
     unoFx: null as UnoFx | null,
+    stats: loadStats(),
   }),
   getters: {
     myId(state): string {
@@ -101,6 +120,10 @@ export const useUno = defineStore('uno', {
         this.pendingWildCard = null;
         this.pendingSwapCard = null;
         sfx.playEvents(payload.events || [], this.userId);
+        // 仅当本批次事件含 settled 时记录胜负，避免重连补发（events 为空）重复计数
+        if (payload.state.phase === 'settled' && (payload.events || []).some((e: any) => e?.type === 'settled')) {
+          this.recordResult(payload.state.winnerId);
+        }
       });
       // 开局：洗牌发牌动效（约 2.8s 后亮出牌桌）
       socket.on('game:dealing', () => {
@@ -185,6 +208,12 @@ export const useUno = defineStore('uno', {
     },
     resume() {
       socket?.emit('game:resume');
+    },
+    recordResult(winnerId: string | null) {
+      if (winnerId === null) this.stats.draw++;
+      else if (winnerId === this.userId) this.stats.win++;
+      else this.stats.lose++;
+      localStorage.setItem('uno.stats', JSON.stringify(this.stats));
     },
   },
 });

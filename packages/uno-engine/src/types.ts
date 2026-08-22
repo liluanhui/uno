@@ -53,7 +53,7 @@ export type GameEvent =
   | { type: 'handSwapped'; aId: string; bId: string }
   | { type: 'handsRotated' }
   | { type: 'colorChosen'; color: RealColor }
-  | { type: 'settled'; winnerId: string | null; scores: Record<string, number> };
+  | { type: 'settled'; winnerId: string | null };
 
 /** 引擎抛出的业务错误，附带稳定 code 供消费方分支处理 */
 export class GameError extends Error {

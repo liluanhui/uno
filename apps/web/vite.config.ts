@@ -7,7 +7,7 @@ export default defineConfig({
     port: Number(process.env.WEB_PORT) || 5173,
     proxy: {
       '/socket.io': {
-        target: `http://localhost:${process.env.API_PORT || 5001}`,
+        target: `http://192.168.1.15:${process.env.API_PORT || 5001}`,
         ws: true,
       },
     },

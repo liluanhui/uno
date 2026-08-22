@@ -69,7 +69,6 @@ export interface GameView {
     calledUno: boolean;
   }[];
   winnerId: string | null;
-  scores: Record<string, number>;
 }
 
 @Injectable()
@@ -519,7 +518,6 @@ export class RoomService {
         calledUno: p.calledUno,
       })),
       winnerId: game.winnerId,
-      scores: game.scores,
     };
   }
 }
